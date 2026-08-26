@@ -1,0 +1,22 @@
+    [package]
+    name = "fanwaave-lib-core"
+    version = "0.1.0"
+    edition = "2021"
+    license = "MIT"
+    description = "SeaORM boundary for Fanwaave on PostgreSQL and CockroachDB"
+    repository = "https://github.com/fanwaave/fanwaave-lib-core"
+
+    [features]
+    default = ["read-only"]
+    read-only = []
+    read-write = ["read-only"]
+    migrate = ["read-write"]
+
+    [dependencies]
+    serde = { version = "1", features = ["derive"] }
+    thiserror = "2"
+
+[lints.rust]
+unsafe_code = "forbid"
+
+
