@@ -4,7 +4,7 @@
 -- CI gate:     node scripts/embeddings/generate.mjs --check
 --
 -- Contract:    ores-embedding-contract 2026.08.29
--- Contract sha256: 39b8e1599d227a97f2362fdb6d3495dd38853b3345d7b05e90b64088884f9250
+-- Contract sha256: 98976465928699fb3c6c20728e4ad9f42a9d4ba0a626332f9184317c77c1e844
 -- Manifest sha256: c4dc92e735028690aa8b3b3b73db05bb87cbe612345830654cf4393bf0fd4f03
 -- Owning GitHub org: fanwaave
 --
