@@ -1,0 +1,22 @@
+{
+  "githubOrg": "fanwaave",
+  "libCore": "fanwaave/fanwaave-lib-core",
+  "interfaces": "fanwaave/fanwaave-interfaces",
+  "prefix": "fanwaave",
+  "pgSchema": "fanwaave",
+  "tenantColumn": "workspace_id",
+  "table": "message_embeddings",
+  "purpose": "De-duplicate messages by meaning rather than by hash, so the same news reaching a user through three channels produces one notification instead of three.",
+  "entityKinds": [
+    "message",
+    "notification",
+    "digest_item",
+    "thread",
+    "push_payload"
+  ],
+  "correlationEnabled": true,
+  "alertsEnabled": true,
+  "dedupeEnabled": true,
+  "dedupeIsPrimary": true,
+  "linearTeam": "DEN"
+}

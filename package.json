@@ -1,0 +1,11 @@
+{
+  "name": "@fanwaave/fanwaave-lib-core",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "embeddings:generate": "node scripts/embeddings/generate.mjs",
+    "embeddings:check": "node scripts/embeddings/generate.mjs --check",
+    "embeddings:test": "node --test tests/embeddings-contract.test.mjs"
+  }
+}
