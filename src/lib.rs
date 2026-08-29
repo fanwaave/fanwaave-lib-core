@@ -12,3 +12,4 @@ pub use error::CoreError;
 pub use flavor::DatabaseFlavor;
 pub use schema::SCHEMA_REVISION;
 
+pub mod embedding_contract;
