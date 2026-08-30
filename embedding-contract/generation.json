@@ -61,6 +61,6 @@
     "verifier": "scripts/verify-embedding-contract.mjs",
     "typeSpecCompiler": "@typespec/compiler@1.15.0",
     "typeSpecJsonSchemaEmitter": "@typespec/json-schema@1.15.0",
-    "jsonSchemaValidator": "ajv@8.17.1"
+    "jsonSchemaValidator": "ajv@8.20.0"
   }
 }
