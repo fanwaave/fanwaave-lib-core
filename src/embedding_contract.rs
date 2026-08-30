@@ -53,7 +53,7 @@ pub struct ModelDimensions {
 pub struct PaddedEmbedding {
     values: Box<[f32]>,
     original_dimensions: usize,
-    l2_norm: f32,
+    l2_norm: f64,
 }
 
 impl PaddedEmbedding {
@@ -73,8 +73,11 @@ impl PaddedEmbedding {
         if values.iter().any(|value| !value.is_finite()) {
             return Err(EmbeddingContractError::NonFiniteValue);
         }
-        let squared_norm = values.iter().map(|value| value * value).sum::<f32>();
-        if squared_norm <= f32::EPSILON {
+        let squared_norm = values
+            .iter()
+            .map(|value| f64::from(*value).powi(2))
+            .sum::<f64>();
+        if squared_norm <= f64::EPSILON {
             return Err(EmbeddingContractError::ZeroVector);
         }
         values.resize(EMBEDDING_STORAGE_DIMENSIONS, 0.0);
@@ -101,7 +104,7 @@ impl PaddedEmbedding {
     }
 
     #[must_use]
-    pub const fn l2_norm(&self) -> f32 {
+    pub const fn l2_norm(&self) -> f64 {
         self.l2_norm
     }
 }

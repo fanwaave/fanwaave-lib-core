@@ -3,6 +3,20 @@
 
 CREATE SCHEMA IF NOT EXISTS fanwaave;
 
+CREATE OR REPLACE FUNCTION fanwaave.embedding_tail_is_zero_4100(
+  input VECTOR(4100),
+  source_dimensions INT2
+)
+RETURNS BOOL
+LANGUAGE SQL
+IMMUTABLE
+STRICT
+AS $$
+  SELECT source_dimensions BETWEEN 1 AND 4096
+    AND vector_dims(input) = 4100
+    AND vector_norm(subvector(input, source_dimensions + 1, 4100 - source_dimensions)) <= 0.000001
+$$;
+
 CREATE TABLE IF NOT EXISTS fanwaave.embedding_model_profiles (
   embedding_provider STRING NOT NULL,
   model STRING NOT NULL,
@@ -54,7 +68,8 @@ CREATE TABLE IF NOT EXISTS fanwaave.semantic_embeddings (
   expires_at TIMESTAMPTZ NULL,
   FOREIGN KEY (embedding_provider, model)
     REFERENCES fanwaave.embedding_model_profiles (embedding_provider, model),
-  UNIQUE (tenant_id, entity_kind, entity_id, purpose, embedding_provider, model, content_hash)
+  UNIQUE (tenant_id, entity_kind, entity_id, purpose, embedding_provider, model, content_hash),
+  CHECK (fanwaave.embedding_tail_is_zero_4100(embedding, original_dimensions))
 );
 
 CREATE INDEX IF NOT EXISTS semantic_embeddings_scope_idx
@@ -84,7 +99,8 @@ CREATE TABLE IF NOT EXISTS fanwaave.semantic_alert_rules (
   cooldown INTERVAL NOT NULL DEFAULT INTERVAL '1 hour',
   enabled BOOL NOT NULL DEFAULT TRUE,
   created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
-  updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  CHECK (fanwaave.embedding_tail_is_zero_4100(query_embedding, query_original_dimensions))
 );
 
 ALTER TABLE fanwaave.semantic_alert_rules ENABLE ROW LEVEL SECURITY;

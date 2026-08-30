@@ -34,6 +34,14 @@ valid only when the caller explicitly requests the shortened output.
 ## Code-first and DB-first agreement
 
 This lib-core repository keeps Microsoft TypeSpec and JSON Schema beside the
-Rust model. Product-owned desired-state SQL is local here; the ORM core owns the forward-only application migration.
-Run `node scripts/verify-embedding-contract.mjs` and compile the TypeSpec before
-publishing a change.
+Rust model and the Diesel/SeaORM projection. Product-owned desired-state SQL,
+model-profile inputs, and generation configuration are authoritative here.
+`fanwaave-orm-core` may package reviewed generated mirrors, but it does not own
+or independently edit those artifacts.
+
+Run `npm ci --ignore-scripts && npm run check`, then
+`cargo check --all-targets --features orm-projections`. Migration jobs use
+`dpm diff` and `dpm verify` against the local desired SQL, require review of the
+generated plan, and never run from application startup. The ORESoftware shared
+definitions repository may inventory and pin this source revision; it is not a
+fallback SQL or code-generation authority.

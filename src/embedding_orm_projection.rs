@@ -1,0 +1,131 @@
+//! Generated runtime projection for `fanwaave.semantic_embeddings`.
+//!
+//! The product-owned TypeSpec, JSON Schema, and desired SQL under
+//! `embedding-contract/` are authoritative. This module deliberately contains
+//! no connection constructor, generic SQL escape hatch, or migration runner.
+
+#[cfg(feature = "diesel-projection")]
+pub mod diesel_projection {
+    use chrono::{DateTime, Utc};
+    use diesel::{Identifiable, Insertable, Queryable, Selectable};
+    use pgvector::Vector as PgVector;
+    use serde_json::Value as JsonValue;
+    use uuid::Uuid;
+
+    diesel::table! {
+        use diesel::sql_types::*;
+        use pgvector::sql_types::Vector;
+
+        fanwaave.semantic_embeddings (embedding_id) {
+            embedding_id -> Uuid,
+            tenant_id -> Uuid,
+            entity_kind -> Text,
+            entity_id -> Text,
+            purpose -> Text,
+            embedding_provider -> Text,
+            generation_provider -> Nullable<Text>,
+            model -> Text,
+            original_dimensions -> Int2,
+            storage_dimensions -> Int2,
+            embedding -> Vector,
+            normalization -> Text,
+            embedding_space -> Text,
+            search_text -> Text,
+            content_hash -> Text,
+            metadata -> Jsonb,
+            source_updated_at -> Nullable<Timestamptz>,
+            embedded_at -> Timestamptz,
+            expires_at -> Nullable<Timestamptz>,
+        }
+    }
+
+    /// Read projection. The generated `tsvector` column is intentionally
+    /// omitted; named search SQL owns lexical ranking.
+    #[derive(Debug, Clone, PartialEq, Queryable, Selectable, Identifiable)]
+    #[diesel(table_name = semantic_embeddings)]
+    #[diesel(primary_key(embedding_id))]
+    #[diesel(check_for_backend(diesel::pg::Pg))]
+    pub struct EmbeddingRow {
+        pub embedding_id: Uuid,
+        pub tenant_id: Uuid,
+        pub entity_kind: String,
+        pub entity_id: String,
+        pub purpose: String,
+        pub embedding_provider: String,
+        pub generation_provider: Option<String>,
+        pub model: String,
+        pub original_dimensions: i16,
+        pub storage_dimensions: i16,
+        pub embedding: PgVector,
+        pub normalization: String,
+        pub embedding_space: String,
+        pub search_text: String,
+        pub content_hash: String,
+        pub metadata: JsonValue,
+        pub source_updated_at: Option<DateTime<Utc>>,
+        pub embedded_at: DateTime<Utc>,
+        pub expires_at: Option<DateTime<Utc>>,
+    }
+
+    /// Insert projection. Database-generated identity, embedding-space,
+    /// search-document, and timestamps are excluded from the write surface.
+    #[derive(Debug, Clone, PartialEq, Insertable)]
+    #[diesel(table_name = semantic_embeddings)]
+    #[diesel(check_for_backend(diesel::pg::Pg))]
+    pub struct NewEmbeddingRow {
+        pub tenant_id: Uuid,
+        pub entity_kind: String,
+        pub entity_id: String,
+        pub purpose: String,
+        pub embedding_provider: String,
+        pub generation_provider: Option<String>,
+        pub model: String,
+        pub original_dimensions: i16,
+        pub storage_dimensions: i16,
+        pub embedding: PgVector,
+        pub normalization: String,
+        pub search_text: String,
+        pub content_hash: String,
+        pub metadata: JsonValue,
+        pub source_updated_at: Option<DateTime<Utc>>,
+        pub expires_at: Option<DateTime<Utc>>,
+    }
+}
+
+#[cfg(feature = "sea-orm-projection")]
+pub mod sea_orm_projection {
+    use sea_orm::entity::prelude::*;
+
+    /// SeaORM row projection shared by PostgreSQL and CockroachDB adapters.
+    /// Search-document generation and all DDL remain database-owned.
+    #[derive(Clone, Debug, PartialEq, DeriveEntityModel)]
+    #[sea_orm(schema_name = "fanwaave", table_name = "semantic_embeddings")]
+    pub struct Model {
+        #[sea_orm(primary_key, auto_increment = false)]
+        pub embedding_id: Uuid,
+        pub tenant_id: Uuid,
+        pub entity_kind: String,
+        pub entity_id: String,
+        pub purpose: String,
+        pub embedding_provider: String,
+        pub generation_provider: Option<String>,
+        pub model: String,
+        pub original_dimensions: i16,
+        pub storage_dimensions: i16,
+        pub embedding: PgVector,
+        pub normalization: String,
+        pub embedding_space: String,
+        pub search_text: String,
+        pub content_hash: String,
+        #[sea_orm(column_type = "JsonBinary")]
+        pub metadata: Json,
+        pub source_updated_at: Option<DateTimeWithTimeZone>,
+        pub embedded_at: DateTimeWithTimeZone,
+        pub expires_at: Option<DateTimeWithTimeZone>,
+    }
+
+    #[derive(Copy, Clone, Debug, EnumIter, DeriveRelation)]
+    pub enum Relation {}
+
+    impl ActiveModelBehavior for ActiveModel {}
+}

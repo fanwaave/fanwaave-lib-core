@@ -4,6 +4,12 @@
  * Code-first consumers compile this TypeSpec. DB-first generation validates
  * the resulting shape against the product-owned SQL and JSON Schema artifacts.
  */
+import "@typespec/json-schema";
+
+using TypeSpec.JsonSchema;
+
+@jsonSchema
+@baseUri("https://github.com/fanwaave/fanwaave-lib-core/raw/main/embedding-contract/")
 namespace Fanwaave.EmbeddingV2;
 
 const storageDimensions = 4100;
@@ -57,6 +63,7 @@ model StoredEmbedding {
   tenantId: string;
   @minLength(1)
   @maxLength(80)
+  @pattern("^[a-z][a-z0-9_]*$")
   entityKind: string;
   @minLength(1)
   @maxLength(256)
@@ -76,11 +83,13 @@ model StoredEmbedding {
   storageDimensions: 4100;
   @minItems(4100)
   @maxItems(4100)
+  @extension("x-zero-pad-after", "originalDimensions")
   values: float32[];
   normalization: EmbeddingNormalization;
   searchText?: string;
   @minLength(64)
   @maxLength(64)
+  @pattern("^[0-9a-f]{64}$")
   contentHash: string;
   metadata?: Record<unknown>;
 }

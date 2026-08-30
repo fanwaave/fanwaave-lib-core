@@ -17,12 +17,13 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: 22
-      - name: Verify cross-artifact invariants
-        run: node scripts/verify-embedding-contract.mjs
-      - name: Compile Microsoft TypeSpec
-        run: npx --yes --package @typespec/compiler@1.15.0 tsp compile embedding-contract/embeddings.tsp --no-emit
+          cache: npm
+      - name: Install pinned contract toolchain
+        run: npm ci --ignore-scripts
+      - name: Emit TypeSpec JSON Schema and verify cross-artifact invariants
+        run: npm run check
       - uses: dtolnay/rust-toolchain@stable
-      - name: Test isolated Rust contract
+      - name: Test normalization and compile Diesel plus SeaORM projections
         run: |
-          rustc --edition 2021 --test src/embedding_contract.rs -o /tmp/embedding-contract-tests
-          /tmp/embedding-contract-tests
+          cargo test --all-targets
+          cargo check --all-targets --features orm-projections

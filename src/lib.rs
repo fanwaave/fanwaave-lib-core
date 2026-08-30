@@ -13,3 +13,4 @@ pub use flavor::DatabaseFlavor;
 pub use schema::SCHEMA_REVISION;
 
 pub mod embedding_contract;
+pub mod embedding_orm_projection;

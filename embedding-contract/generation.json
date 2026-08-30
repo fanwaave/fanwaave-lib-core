@@ -3,6 +3,13 @@
   "owner": "fanwaave",
   "repositoryRole": "lib-core",
   "externalSqlAuthorities": [],
+  "authority": {
+    "kind": "product-owned",
+    "repository": "fanwaave/fanwaave-lib-core",
+    "sqlAndCodeGenerationLocal": true,
+    "ormCoreRole": "generated-runtime-mirror",
+    "sharedDefinitionsRole": "inventory-pins-and-conformance-only"
+  },
   "dimensions": {
     "storage": 4100,
     "maximumSource": 4096,
@@ -11,7 +18,8 @@
   "codeFirst": {
     "typeSpec": "embedding-contract/embeddings.tsp",
     "jsonSchema": "embedding-contract/embedding-record.schema.json",
-    "rustModel": "src/embedding_contract.rs"
+    "rustModel": "src/embedding_contract.rs",
+    "ormProjection": "src/embedding_orm_projection.rs"
   },
   "databaseFirst": {
     "postgres": "embedding-contract/sql/postgres/desired.sql",
@@ -22,8 +30,37 @@
     "cockroachdbQuery": "embedding-contract/sql/cockroachdb/hybrid-search.sql",
     "migrationsAreAppliedAtStartup": false
   },
+  "migrationPlanning": {
+    "tool": "declarative-migrations/declarative-postgres-migrate.rs",
+    "command": "dpm",
+    "postgresSource": "embedding-contract/sql/postgres/desired.sql",
+    "cockroachdbSource": "embedding-contract/sql/cockroachdb/desired.sql",
+    "requiresReviewedPlan": true,
+    "requiresShadowVerification": true,
+    "runtimeMayApply": false
+  },
+  "models": [
+    { "provider": "openai", "model": "text-embedding-ada-002", "minimum": 1536, "default": 1536, "maximum": 1536, "mrl": false },
+    { "provider": "openai", "model": "text-embedding-3-small", "minimum": 1, "default": 1536, "maximum": 1536, "mrl": true },
+    { "provider": "openai", "model": "text-embedding-3-large", "minimum": 1, "default": 3072, "maximum": 3072, "mrl": true },
+    { "provider": "google", "model": "gemini-embedding-001", "minimum": 128, "default": 3072, "maximum": 3072, "mrl": true },
+    { "provider": "qwen", "model": "Qwen/Qwen3-Embedding-8B", "minimum": 32, "default": 4096, "maximum": 4096, "mrl": true },
+    { "provider": "nvidia", "model": "nvidia/NV-Embed-v2", "minimum": 4096, "default": 4096, "maximum": 4096, "mrl": false },
+    { "provider": "baai", "model": "BAAI/bge-en-icl", "minimum": 4096, "default": 4096, "maximum": 4096, "mrl": false },
+    { "provider": "voyage", "model": "voyage-4-large", "minimum": 256, "default": 1024, "maximum": 2048, "mrl": true, "allowed": [256, 512, 1024, 2048] },
+    { "provider": "voyage", "model": "voyage-4", "minimum": 256, "default": 1024, "maximum": 2048, "mrl": true, "allowed": [256, 512, 1024, 2048] },
+    { "provider": "voyage", "model": "voyage-4-lite", "minimum": 256, "default": 1024, "maximum": 2048, "mrl": true, "allowed": [256, 512, 1024, 2048] }
+  ],
+  "runtimeProjections": {
+    "diesel": "2.2",
+    "seaOrm": "1.1",
+    "pgvectorRust": "0.4.2",
+    "ormCoreMirror": "fanwaave/fanwaave-orm-core"
+  },
   "conformance": {
     "verifier": "scripts/verify-embedding-contract.mjs",
-    "typeSpecCompiler": "@typespec/compiler@1.15.0"
+    "typeSpecCompiler": "@typespec/compiler@1.15.0",
+    "typeSpecJsonSchemaEmitter": "@typespec/json-schema@1.15.0",
+    "jsonSchemaValidator": "ajv@8.17.1"
   }
 }

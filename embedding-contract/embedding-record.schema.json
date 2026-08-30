@@ -96,6 +96,7 @@
       "type": "array",
       "minItems": 4100,
       "maxItems": 4100,
+      "x-zero-pad-after": "originalDimensions",
       "items": {
         "type": "number"
       },
