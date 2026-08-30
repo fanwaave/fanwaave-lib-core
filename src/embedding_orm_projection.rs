@@ -1,6 +1,6 @@
 //! Generated runtime projection for `fanwaave.semantic_embeddings`.
 //!
-//! The product-owned TypeSpec, JSON Schema, and desired SQL under
+//! The product-owned `TypeSpec`, JSON Schema, and desired SQL under
 //! `embedding-contract/` are authoritative. This module deliberately contains
 //! no connection constructor, generic SQL escape hatch, or migration runner.
 
@@ -13,7 +13,7 @@ pub mod diesel_projection {
     use uuid::Uuid;
 
     diesel::table! {
-        use diesel::sql_types::*;
+        use diesel::sql_types::{Int2, Jsonb, Nullable, Text, Timestamptz, Uuid};
         use pgvector::sql_types::Vector;
 
         fanwaave.semantic_embeddings (embedding_id) {
@@ -96,7 +96,7 @@ pub mod diesel_projection {
 pub mod sea_orm_projection {
     use sea_orm::entity::prelude::*;
 
-    /// SeaORM row projection shared by PostgreSQL and CockroachDB adapters.
+    /// `SeaORM` row projection shared by `PostgreSQL` and `CockroachDB` adapters.
     /// Search-document generation and all DDL remain database-owned.
     #[derive(Clone, Debug, PartialEq, DeriveEntityModel)]
     #[sea_orm(schema_name = "fanwaave", table_name = "semantic_embeddings")]
