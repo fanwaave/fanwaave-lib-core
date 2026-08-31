@@ -106,6 +106,8 @@ CREATE TABLE IF NOT EXISTS fanwaave.semantic_embeddings (
 
 CREATE INDEX IF NOT EXISTS semantic_embeddings_scope_idx
   ON fanwaave.semantic_embeddings (tenant_id, embedding_space, purpose, entity_kind, embedded_at DESC);
+CREATE INDEX IF NOT EXISTS semantic_embeddings_model_profile_fk_idx
+  ON fanwaave.semantic_embeddings (embedding_provider, model);
 CREATE INDEX IF NOT EXISTS semantic_embeddings_search_document_idx
   ON fanwaave.semantic_embeddings USING GIN (search_document);
 ALTER TABLE fanwaave.semantic_embeddings ENABLE ROW LEVEL SECURITY;
@@ -228,6 +230,13 @@ CREATE TABLE IF NOT EXISTS fanwaave.semantic_match_events (
   UNIQUE (tenant_id, notification_dedupe_key),
   CHECK (source_embedding_id <> candidate_embedding_id)
 );
+
+CREATE INDEX IF NOT EXISTS semantic_match_events_alert_rule_fk_idx
+  ON fanwaave.semantic_match_events (alert_rule_id);
+CREATE INDEX IF NOT EXISTS semantic_match_events_source_embedding_fk_idx
+  ON fanwaave.semantic_match_events (source_embedding_id);
+CREATE INDEX IF NOT EXISTS semantic_match_events_candidate_embedding_fk_idx
+  ON fanwaave.semantic_match_events (candidate_embedding_id);
 
 ALTER TABLE fanwaave.semantic_match_events ENABLE ROW LEVEL SECURITY;
 ALTER TABLE fanwaave.semantic_match_events FORCE ROW LEVEL SECURITY;
