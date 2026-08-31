@@ -1,9 +1,10 @@
 -- PostgreSQL-family platform preflight, owned by Fanwaave infra.
 --
--- DPM intentionally diffs the product schema (`fanwaave`) rather than the
--- managed extension schema. Apply this idempotent preflight with the migrator
--- role before `dpm diff`, `dpm verify`, or `dpm apply`. Supabase installs its
--- current default extension version; version clauses are deliberately absent.
+-- DPM declares and verifies extension placement as part of the desired state.
+-- Use this idempotent bootstrap only while provisioning a blank database, or
+-- after `dpm apply` as a capability assertion. For an existing database, let
+-- `dpm diff` review any extension creation or schema move before execution.
+-- Supabase installs its current default version; version clauses are absent.
 CREATE SCHEMA IF NOT EXISTS extensions;
 CREATE EXTENSION IF NOT EXISTS vector WITH SCHEMA extensions;
 CREATE EXTENSION IF NOT EXISTS pgcrypto;
