@@ -18,8 +18,8 @@
     [dependencies]
     chrono = { version = "0.4", features = ["serde"], optional = true }
     diesel = { version = "=2.2.12", default-features = false, features = ["32-column-tables", "chrono", "postgres", "serde_json", "uuid"], optional = true }
-    pgvector = { version = "0.4.2", features = ["diesel", "serde"], optional = true }
-    sea-orm = { version = "1.1", default-features = false, features = ["macros", "postgres-vector", "with-chrono", "with-json", "with-uuid"], optional = true }
+    pgvector = { version = "=0.4.2", features = ["diesel", "halfvec", "serde"], optional = true }
+    sea-orm = { version = "=1.1.20", default-features = false, features = ["macros", "postgres-vector", "with-chrono", "with-json", "with-uuid"], optional = true }
     serde = { version = "1", features = ["derive"] }
     serde_json = { version = "1", optional = true }
     thiserror = "2"

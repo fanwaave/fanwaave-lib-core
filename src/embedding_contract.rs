@@ -3,6 +3,7 @@
 use core::fmt;
 
 pub const EMBEDDING_STORAGE_DIMENSIONS: usize = 4100;
+pub const EMBEDDING_INDEX_DIMENSIONS: usize = 4000;
 pub const MAXIMUM_SOURCE_DIMENSIONS: usize = 4096;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -101,6 +102,13 @@ impl PaddedEmbedding {
     #[must_use]
     pub const fn storage_dimensions(&self) -> usize {
         EMBEDDING_STORAGE_DIMENSIONS
+    }
+
+    /// Returns the deterministic candidate-search projection persisted as
+    /// `halfvec(4000)`. Final similarity MUST be recomputed from [`Self::values`].
+    #[must_use]
+    pub fn indexed_projection(&self) -> &[f32] {
+        &self.values[..EMBEDDING_INDEX_DIMENSIONS]
     }
 
     #[must_use]
@@ -219,6 +227,7 @@ mod tests {
         )
         .expect("valid Qwen output");
         assert_eq!(embedding.values().len(), 4100);
+        assert_eq!(embedding.indexed_projection().len(), 4000);
         assert!(embedding.values()[4096..]
             .iter()
             .all(|value| value.abs() <= f32::EPSILON));

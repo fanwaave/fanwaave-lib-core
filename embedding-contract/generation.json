@@ -1,5 +1,5 @@
 {
-  "contractVersion": "2.0.0",
+  "contractVersion": "3.0.0",
   "owner": "fanwaave",
   "repositoryRole": "lib-core",
   "externalSqlAuthorities": [],
@@ -12,8 +12,12 @@
   },
   "dimensions": {
     "storage": 4100,
+    "exactStorage": 4100,
+    "indexedProjection": 4000,
     "maximumSource": 4096,
-    "padding": "trailing-zero"
+    "padding": "trailing-zero",
+    "candidateType": "halfvec",
+    "exactType": "vector"
   },
   "codeFirst": {
     "typeSpec": "embedding-contract/embeddings.tsp",
@@ -25,6 +29,12 @@
     "postgres": "embedding-contract/sql/postgres/desired.sql",
     "cockroachdb": "embedding-contract/sql/cockroachdb/desired.sql",
     "postgresDesiredState": "embedding-contract/sql/postgres/desired.sql",
+    "postgresFamilyPreflight": "embedding-contract/sql/postgres/preflight.sql",
+    "neonDesiredState": "embedding-contract/sql/postgres/desired.sql",
+    "supabaseBaseDesiredState": "embedding-contract/sql/postgres/desired.sql",
+    "supabasePrivateAdapter": "embedding-contract/sql/supabase/private-adapter.sql",
+    "supabasePrivilegeVerification": "embedding-contract/sql/supabase/verify-private.sql",
+    "postgresIndexReconciliation": "embedding-contract/sql/postgres/reconcile-index.sql",
     "cockroachdbDesiredState": "embedding-contract/sql/cockroachdb/desired.sql",
     "postgresQuery": "embedding-contract/sql/postgres/hybrid-search.sql",
     "cockroachdbQuery": "embedding-contract/sql/cockroachdb/hybrid-search.sql",
@@ -38,6 +48,23 @@
     "requiresReviewedPlan": true,
     "requiresShadowVerification": true,
     "runtimeMayApply": false
+  },
+  "postgresFamily": {
+    "base": ["postgresql", "neon", "supabase"],
+    "extensionSchema": "extensions",
+    "extensionVersionPinned": false,
+    "exactTable": "fanwaave.semantic_embeddings",
+    "indexedTable": "fanwaave.semantic_embedding_index",
+    "supabaseDataApiExposure": "private",
+    "supabaseClientRoles": ["anon", "authenticated"],
+    "supabaseServerRole": "service_role"
+  },
+  "dataReconciliation": {
+    "tool": "psql",
+    "script": "embedding-contract/sql/postgres/reconcile-index.sql",
+    "idempotent": true,
+    "requiresMigratorBypassRls": true,
+    "dpmOwnsDataMigrations": false
   },
   "models": [
     { "provider": "openai", "model": "text-embedding-ada-002", "minimum": 1536, "default": 1536, "maximum": 1536, "mrl": false },
@@ -53,9 +80,12 @@
   ],
   "runtimeProjections": {
     "diesel": "2.2",
-    "seaOrm": "1.1",
+    "seaOrm": "1.1.20",
     "pgvectorRust": "0.4.2",
-    "ormCoreMirror": "fanwaave/fanwaave-orm-core"
+    "ormCoreMirror": "fanwaave/fanwaave-orm-core",
+    "dieselIndexedType": "pgvector::HalfVector",
+    "seaOrmExactType": "sea_orm::entity::prelude::PgVector",
+    "hybridSearchInterface": "named-sql"
   },
   "conformance": {
     "verifier": "scripts/verify-embedding-contract.mjs",

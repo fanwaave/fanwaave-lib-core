@@ -13,6 +13,7 @@ using TypeSpec.JsonSchema;
 namespace Fanwaave.EmbeddingV2;
 
 const storageDimensions = 4100;
+const indexedDimensions = 4000;
 const maximumSourceDimensions = 4096;
 
 enum EmbeddingProvider {
@@ -92,4 +93,23 @@ model StoredEmbedding {
   @pattern("^[0-9a-f]{64}$")
   contentHash: string;
   metadata?: Record<unknown>;
+}
+
+/**
+ * Database-derived ANN candidate projection. It is never accepted as a write
+ * payload and never replaces the exact StoredEmbedding values for reranking.
+ */
+model IndexedEmbeddingProjection {
+  @format("uuid")
+  embeddingId: string;
+  @format("uuid")
+  tenantId: string;
+  purpose: EmbeddingPurpose;
+  @minLength(8)
+  @maxLength(320)
+  embeddingSpace: string;
+  indexedDimensions: 4000;
+  @minItems(4000)
+  @maxItems(4000)
+  values: float32[];
 }

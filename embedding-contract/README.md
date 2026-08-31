@@ -1,4 +1,4 @@
-# Fanwaave embedding contract v2
+# Fanwaave embedding contract v3
 
 This product-owned contract covers semantic message deduplication and redundant-notification suppression. It supports provider
 outputs up to 4,096 dimensions and stores every vector in exactly 4,100 slots.
@@ -18,10 +18,19 @@ valid only when the caller explicitly requests the shortened output.
 
 ## Storage and indexing
 
-- PostgreSQL stores `vector(4100)`. Since full-precision HNSW is limited to
-  2,000 dimensions (and half precision to 4,000), candidate generation uses a
-  4,100-bit binary-quantized HNSW expression and exact full-vector cosine
-  re-ranking. Lexical ranking uses a GIN-indexed `tsvector`.
+- PostgreSQL, Neon, and Supabase keep the authoritative value in the unindexed
+  `semantic_embeddings.embedding extensions.vector(4100)` column. A separate
+  one-to-one `semantic_embedding_index` table holds the deterministic first
+  4,000 values as `extensions.halfvec(4000)`, pgvector's HNSW ceiling for that
+  type. Candidate generation uses this projection and always reranks against
+  all 4,100 full-precision values. Lexical ranking uses a GIN-indexed
+  `tsvector` on the exact table.
+- A database trigger maintains new projections without an application-level
+  dual-write race. The idempotent `sql/postgres/reconcile-index.sql` handles
+  existing rows; DPM remains schema-only and verifies the resulting schema.
+- The Supabase adapter keeps product vector tables outside the browser-facing
+  Data API by revoking `anon` and `authenticated` privileges explicitly.
+  Exposing a client API requires a separate reviewed ownership layer.
 - CockroachDB stores `VECTOR(4100)`, uses a tenant-prefixed native vector
   index, and combines it with a GIN-indexed `TSVECTOR`.
 - Every row has a deterministic embedding-space identity (provider, model,
@@ -41,7 +50,8 @@ or independently edit those artifacts.
 
 Run `npm ci --ignore-scripts && npm run check`, then
 `cargo check --all-targets --features orm-projections`. Migration jobs use
-`dpm diff` and `dpm verify` against the local desired SQL, require review of the
-generated plan, and never run from application startup. The ORESoftware shared
+`dpm diff` and `dpm verify` against the local desired SQL for PostgreSQL, Neon,
+and Supabase, require review of the generated plan, and never run from
+application startup. The ORESoftware shared
 definitions repository may inventory and pin this source revision; it is not a
 fallback SQL or code-generation authority.

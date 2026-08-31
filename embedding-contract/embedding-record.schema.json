@@ -178,6 +178,56 @@
           }
         }
       }
+    },
+    "IndexedEmbeddingProjection": {
+      "description": "Database-derived halfvec(4000) ANN candidate. Exact scoring still uses the 4100-value StoredEmbedding.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "embeddingId",
+        "tenantId",
+        "purpose",
+        "embeddingSpace",
+        "indexedDimensions",
+        "values"
+      ],
+      "properties": {
+        "embeddingId": {
+          "type": "string",
+          "format": "uuid"
+        },
+        "tenantId": {
+          "type": "string",
+          "format": "uuid"
+        },
+        "purpose": {
+          "$ref": "#/$defs/EmbeddingPurpose"
+        },
+        "embeddingSpace": {
+          "type": "string",
+          "minLength": 8,
+          "maxLength": 320
+        },
+        "indexedDimensions": {
+          "const": 4000
+        },
+        "values": {
+          "type": "array",
+          "minItems": 4000,
+          "maxItems": 4000,
+          "items": {
+            "type": "number"
+          }
+        }
+      }
+    },
+    "EmbeddingPurpose": {
+      "type": "string",
+      "enum": [
+        "message_deduplication",
+        "notification_suppression",
+        "content_search"
+      ]
     }
   }
 }
