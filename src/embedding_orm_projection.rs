@@ -129,7 +129,7 @@ pub mod sea_orm_projection {
     use sea_orm::entity::prelude::*;
 
     /// Exact `SeaORM` row projection shared by PostgreSQL-family and
-    /// CockroachDB adapters. `SeaORM` 1.1 has a native `PgVector` mapping but
+    /// `CockroachDB` adapters. `SeaORM` 1.1 has a native `PgVector` mapping but
     /// no native `halfvec` entity column, so the derived ANN table remains a
     /// read-only Diesel projection and named hybrid-search SQL returns scalar
     /// scores. Search-document generation and all DDL remain database-owned.
