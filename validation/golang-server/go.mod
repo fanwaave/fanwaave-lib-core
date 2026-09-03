@@ -1,6 +1,6 @@
 module github.com/fanwaave/fanwaave-lib-core/validation/golang-server
 
-go 1.24
+go 1.25.0
 
 require (
     github.com/fanwaave/fanwaave-lib-core/validation/golang v0.0.0
