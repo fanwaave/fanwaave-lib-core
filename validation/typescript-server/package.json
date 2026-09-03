@@ -14,7 +14,7 @@
   },
   "scripts": {
     "build": "tsc -p tsconfig.json",
-    "test": "npm run build"
+    "test": "npm run build && node --test test/server.test.mjs"
   },
   "dependencies": {
     "@fanwaave/fanwaave-validation": "file:../typescript",
