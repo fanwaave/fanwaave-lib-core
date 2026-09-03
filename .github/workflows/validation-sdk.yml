@@ -45,9 +45,9 @@ jobs:
         with:
           go-version: "1.25.x"
           cache: false
-      - run: go test -mod=mod ./...
+      - run: go test -race -count=1 -mod=mod ./...
         working-directory: validation/golang
-      - run: go test -mod=mod ./...
+      - run: go test -race -count=1 -mod=mod ./...
         working-directory: validation/golang-server
 
   gleam:
@@ -59,7 +59,7 @@ jobs:
         working-directory: validation/gleam
       - run: gleam check --target javascript
         working-directory: validation/gleam
-      - run: gleam check --target erlang
+      - run: gleam test --target erlang
         working-directory: validation/gleam-server
       - run: gleam check --target javascript
         working-directory: validation/gleam-server
