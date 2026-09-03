@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"encoding/json"
 	"fmt"
+	"io"
 
 	"github.com/go-playground/validator/v10"
 )
@@ -43,6 +44,12 @@ func DecodeAndValidate[T any](data []byte) (T, error) {
 	decoder := json.NewDecoder(bytes.NewReader(data))
 	decoder.DisallowUnknownFields()
 	if err := decoder.Decode(&value); err != nil {
+		return value, fmt.Errorf("decode public value: %w", err)
+	}
+	if err := decoder.Decode(&struct{}{}); err != io.EOF {
+		if err == nil {
+			return value, fmt.Errorf("decode public value: trailing JSON value")
+		}
 		return value, fmt.Errorf("decode public value: %w", err)
 	}
 	if err := Validate(value); err != nil {
