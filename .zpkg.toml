@@ -2,3 +2,14 @@ name = "fanwaave-lib-core"
 kind = "lib-core"
 version = "0.1.0"
 
+
+[dependencies]
+"oresoftware/ores-locks-and-leases" = "=0.1.1"
+"fanwaave/fanwaave-interfaces" = "^0.1.0"
+
+# The org's lock routines: ORESoftware/ores-locks-and-leases wrapped with
+# this org's key prefix and catalog. Nested zed package; see locks/README.md.
+[targets.locks]
+dir = "locks"
+name = "fanwaave-locks"
+adapter = "none"
