@@ -11,4 +11,3 @@ pub use connection::CorePool;
 pub use error::CoreError;
 pub use flavor::DatabaseFlavor;
 pub use schema::SCHEMA_REVISION;
-
