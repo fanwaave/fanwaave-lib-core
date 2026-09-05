@@ -1,0 +1,49 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/fanwaave/fanwaave-lib-core/validation/contract.v1.json",
+  "contractVersion": "ores.validation.v1",
+  "owner": "fanwaave/fanwaave-lib-core",
+  "publicAuthority": "https://github.com/fanwaave/fanwaave-interfaces/tree/main/validation",
+  "routeAuthority": "https://github.com/ORESoftware/api-docs",
+  "visibility": {
+    "public": [
+      "request-meta",
+      "page-query",
+      "problem-details"
+    ],
+    "server": [
+      "trusted-actor",
+      "server-request-context",
+      "internal-command"
+    ]
+  },
+  "languageBindings": {
+    "typescript": {
+      "library": "zod",
+      "publicPackage": "@fanwaave/fanwaave-validation",
+      "serverPackage": "@fanwaave/fanwaave-validation-server"
+    },
+    "rust": {
+      "library": "garde",
+      "publicPackage": "fanwaave-validation",
+      "serverPackage": "fanwaave-validation-server"
+    },
+    "golang": {
+      "library": "go-playground/validator/v10",
+      "publicPackage": "github.com/fanwaave/fanwaave-lib-core/validation/golang",
+      "serverPackage": "github.com/fanwaave/fanwaave-lib-core/validation/golang-server"
+    },
+    "gleam": {
+      "library": "gleam/dynamic/decode",
+      "publicPackage": "fanwaave_validation",
+      "serverPackage": "fanwaave_validation_server"
+    }
+  },
+  "rules": {
+    "clientExportsPublicOnly": true,
+    "serverMayImportPublic": true,
+    "serverDefinitionsNeverEmittedToClients": true,
+    "routeBindingsUseApiDocsOperationId": true,
+    "unknownFieldsRejectedWhereRuntimeSupportsIt": true
+  }
+}

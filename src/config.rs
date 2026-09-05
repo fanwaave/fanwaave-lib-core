@@ -12,7 +12,8 @@ pub struct CoreConfig {
 
 impl CoreConfig {
     pub fn from_env() -> Result<Self, CoreError> {
-        let database_url = std::env::var("FANWAAVE_DATABASE_URL").map_err(|_| CoreError::InvalidDatabaseUrl)?;
+        let database_url =
+            std::env::var("FANWAAVE_DATABASE_URL").map_err(|_| CoreError::InvalidDatabaseUrl)?;
         if !(database_url.starts_with("postgres://") || database_url.starts_with("postgresql://")) {
             return Err(CoreError::InvalidDatabaseUrl);
         }
@@ -28,4 +29,3 @@ impl CoreConfig {
         })
     }
 }
-

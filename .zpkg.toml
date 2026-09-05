@@ -1,4 +1,38 @@
+[package]
+org = "fanwaave"
 name = "fanwaave-lib-core"
-kind = "lib-core"
 version = "0.1.0"
+description = "SeaORM boundary for Fanwaave on PostgreSQL and CockroachDB"
+license = "MIT"
+keywords = ["orm", "postgres", "cockroachdb", "migrations"]
 
+[package.repository]
+vcs = "git"
+url = "https://github.com/fanwaave/fanwaave-lib-core"
+
+[dependencies]
+"oresoftware/ores-locks-and-leases" = "=0.1.1"
+"fanwaave/fanwaave-interfaces" = "^0.1.0"
+
+[install]
+dir = ".vendor/.zed"
+
+[targets.rust]
+dir = "."
+adapter = "rust"
+
+# The org's lock routines: ORESoftware/ores-locks-and-leases wrapped with
+# this org's key prefix and catalog. Nested zed package; see locks/README.md.
+[targets.locks]
+dir = "locks"
+name = "fanwaave-locks"
+adapter = "none"
+
+[publish]
+include_readme = true
+tag_format = "v{version}"
+smoke_test = "cargo test --manifest-path \"$ZED_PKG_TEST_TARGET/Cargo.toml\" --all-features"
+exclude = [".env", ".env.*", ".vendor/.zed/**", ".zed/**", ".zed-pack/**", "target/**", "**/target/**", "**/node_modules/**", "**/*.log", ".DS_Store"]
+
+[scripts]
+test = "cargo fmt --all -- --check && cargo clippy --all-targets --all-features -- -D warnings && cargo test --all-features"
