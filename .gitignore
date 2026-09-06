@@ -1,5 +1,6 @@
 /target
 /node_modules
+/.typespec-output
 /build
 /.dart_tool
 /coverage
@@ -9,4 +10,3 @@
 !.env.example
 *.sqlite
 Cargo.lock
-

@@ -1,0 +1,96 @@
+{
+  "contractVersion": "3.0.0",
+  "owner": "fanwaave",
+  "repositoryRole": "lib-core",
+  "externalSqlAuthorities": [],
+  "authority": {
+    "kind": "product-owned",
+    "repository": "fanwaave/fanwaave-lib-core",
+    "sqlAndCodeGenerationLocal": true,
+    "ormCoreRole": "generated-runtime-mirror",
+    "sharedDefinitionsRole": "inventory-pins-and-conformance-only"
+  },
+  "dimensions": {
+    "storage": 4100,
+    "exactStorage": 4100,
+    "indexedProjection": 4000,
+    "maximumSource": 4096,
+    "padding": "trailing-zero",
+    "candidateType": "halfvec",
+    "exactType": "vector"
+  },
+  "codeFirst": {
+    "typeSpec": "embedding-contract/embeddings.tsp",
+    "jsonSchema": "embedding-contract/embedding-record.schema.json",
+    "rustModel": "src/embedding_contract.rs",
+    "ormProjection": "src/embedding_orm_projection.rs"
+  },
+  "databaseFirst": {
+    "postgres": "embedding-contract/sql/postgres/desired.sql",
+    "cockroachdb": "embedding-contract/sql/cockroachdb/desired.sql",
+    "postgresDesiredState": "embedding-contract/sql/postgres/desired.sql",
+    "postgresFamilyPreflight": "embedding-contract/sql/postgres/preflight.sql",
+    "neonDesiredState": "embedding-contract/sql/postgres/desired.sql",
+    "supabaseBaseDesiredState": "embedding-contract/sql/postgres/desired.sql",
+    "supabasePrivateAdapter": "embedding-contract/sql/supabase/private-adapter.sql",
+    "supabasePrivilegeVerification": "embedding-contract/sql/supabase/verify-private.sql",
+    "postgresIndexReconciliation": "embedding-contract/sql/postgres/reconcile-index.sql",
+    "cockroachdbDesiredState": "embedding-contract/sql/cockroachdb/desired.sql",
+    "postgresQuery": "embedding-contract/sql/postgres/hybrid-search.sql",
+    "cockroachdbQuery": "embedding-contract/sql/cockroachdb/hybrid-search.sql",
+    "migrationsAreAppliedAtStartup": false
+  },
+  "migrationPlanning": {
+    "tool": "declarative-migrations/declarative-postgres-migrate.rs",
+    "command": "dpm",
+    "postgresSource": "embedding-contract/sql/postgres/desired.sql",
+    "cockroachdbSource": "embedding-contract/sql/cockroachdb/desired.sql",
+    "requiresReviewedPlan": true,
+    "requiresShadowVerification": true,
+    "runtimeMayApply": false
+  },
+  "postgresFamily": {
+    "base": ["postgresql", "neon", "supabase"],
+    "extensionSchema": "extensions",
+    "extensionVersionPinned": false,
+    "exactTable": "fanwaave.semantic_embeddings",
+    "indexedTable": "fanwaave.semantic_embedding_index",
+    "supabaseDataApiExposure": "private",
+    "supabaseClientRoles": ["anon", "authenticated"],
+    "supabaseServerRole": "service_role"
+  },
+  "dataReconciliation": {
+    "tool": "psql",
+    "script": "embedding-contract/sql/postgres/reconcile-index.sql",
+    "idempotent": true,
+    "requiresMigratorBypassRls": true,
+    "dpmOwnsDataMigrations": false
+  },
+  "models": [
+    { "provider": "openai", "model": "text-embedding-ada-002", "minimum": 1536, "default": 1536, "maximum": 1536, "mrl": false },
+    { "provider": "openai", "model": "text-embedding-3-small", "minimum": 1, "default": 1536, "maximum": 1536, "mrl": true },
+    { "provider": "openai", "model": "text-embedding-3-large", "minimum": 1, "default": 3072, "maximum": 3072, "mrl": true },
+    { "provider": "google", "model": "gemini-embedding-001", "minimum": 128, "default": 3072, "maximum": 3072, "mrl": true },
+    { "provider": "qwen", "model": "Qwen/Qwen3-Embedding-8B", "minimum": 32, "default": 4096, "maximum": 4096, "mrl": true },
+    { "provider": "nvidia", "model": "nvidia/NV-Embed-v2", "minimum": 4096, "default": 4096, "maximum": 4096, "mrl": false },
+    { "provider": "baai", "model": "BAAI/bge-en-icl", "minimum": 4096, "default": 4096, "maximum": 4096, "mrl": false },
+    { "provider": "voyage", "model": "voyage-4-large", "minimum": 256, "default": 1024, "maximum": 2048, "mrl": true, "allowed": [256, 512, 1024, 2048] },
+    { "provider": "voyage", "model": "voyage-4", "minimum": 256, "default": 1024, "maximum": 2048, "mrl": true, "allowed": [256, 512, 1024, 2048] },
+    { "provider": "voyage", "model": "voyage-4-lite", "minimum": 256, "default": 1024, "maximum": 2048, "mrl": true, "allowed": [256, 512, 1024, 2048] }
+  ],
+  "runtimeProjections": {
+    "diesel": "2.2",
+    "seaOrm": "1.1.20",
+    "pgvectorRust": "0.4.2",
+    "ormCoreMirror": "fanwaave/fanwaave-orm-core",
+    "dieselIndexedType": "pgvector::HalfVector",
+    "seaOrmExactType": "sea_orm::entity::prelude::PgVector",
+    "hybridSearchInterface": "named-sql"
+  },
+  "conformance": {
+    "verifier": "scripts/verify-embedding-contract.mjs",
+    "typeSpecCompiler": "@typespec/compiler@1.15.0",
+    "typeSpecJsonSchemaEmitter": "@typespec/json-schema@1.15.0",
+    "jsonSchemaValidator": "ajv@8.20.0"
+  }
+}

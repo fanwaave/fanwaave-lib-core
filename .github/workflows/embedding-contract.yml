@@ -1,0 +1,29 @@
+name: embedding-contract
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  contract:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - name: Install pinned contract toolchain
+        run: npm ci --ignore-scripts
+      - name: Emit TypeSpec JSON Schema and verify cross-artifact invariants
+        run: npm run check
+      - uses: dtolnay/rust-toolchain@stable
+      - name: Test normalization and compile Diesel plus SeaORM projections
+        run: |
+          cargo test --all-targets
+          cargo check --all-targets --features orm-projections
