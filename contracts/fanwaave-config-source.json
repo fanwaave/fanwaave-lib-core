@@ -1,0 +1,19 @@
+{
+  "schema": "fanwaave.config-source/v1",
+  "authority": {
+    "repository": "fanwaave/fanwaave-interfaces",
+    "commit": "e27695091a5b8276543a6f435156a25043f297a9",
+    "typespec": "contracts/fanwaave-config/fanwaave-config.tsp",
+    "jsonSchema": "contracts/fanwaave-config/fanwaave-config.schema.json"
+  },
+  "admission": {
+    "validatorRepository": "ORESoftware/typespec-json-schema-validator",
+    "validatorCommit": "4a5d049218adc2740d4cf78f612caf7f38f6f64c",
+    "status": "passed"
+  },
+  "runtimeProjection": {
+    "module": "src/fanwaave_config.rs",
+    "role": "implementation-projection",
+    "authority": false
+  }
+}
