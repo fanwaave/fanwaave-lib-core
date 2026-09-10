@@ -1,0 +1,61 @@
+name: fanwaave-config-runtime
+
+on:
+  pull_request:
+    paths:
+      - ".cli-flags.toml"
+      - "Cargo.toml"
+      - "contracts/fanwaave-config-source.json"
+      - "src/fanwaave_config.rs"
+      - "src/fanwaave_flags2env.rs"
+      - "src/lib.rs"
+      - "tests/fanwaave_config.rs"
+      - "tests/fanwaave_flags2env.rs"
+      - ".github/workflows/fanwaave-config-runtime.yml"
+  push:
+    branches: [main]
+    paths:
+      - ".cli-flags.toml"
+      - "Cargo.toml"
+      - "contracts/fanwaave-config-source.json"
+      - "src/fanwaave_config.rs"
+      - "src/fanwaave_flags2env.rs"
+      - "src/lib.rs"
+      - "tests/fanwaave_config.rs"
+      - "tests/fanwaave_flags2env.rs"
+      - ".github/workflows/fanwaave-config-runtime.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  rust-runtime:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out exact candidate
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+      - name: Verify exact pull-request head
+        if: github.event_name == 'pull_request'
+        run: test "$(git rev-parse HEAD)" = "${{ github.event.pull_request.head.sha }}"
+      - name: Verify TJSV admission provenance
+        run: |
+          python3 - <<'PY'
+          import json
+          from pathlib import Path
+          p = json.loads(Path('contracts/fanwaave-config-source.json').read_text())
+          assert p['authority']['repository'] == 'fanwaave/fanwaave-interfaces'
+          assert p['admission']['validatorRepository'] == 'ORESoftware/typespec-json-schema-validator'
+          assert p['admission']['validatorCommit'] == '4a5d049218adc2740d4cf78f612caf7f38f6f64c'
+          assert p['admission']['status'] == 'passed'
+          source = Path('src/fanwaave_config.rs').read_text()
+          assert 'e27695091a5b8276543a6f435156a25043f297a9' in source
+          assert '4a5d049218adc2740d4cf78f612caf7f38f6f64c' in source
+          PY
+      - name: Check formatting
+        run: cargo fmt --all -- --check
+      - name: Lint root crate
+        run: cargo clippy --all-targets -- -D warnings
+      - name: Test Fanwaave config contracts
+        run: cargo test --test fanwaave_config --test fanwaave_flags2env
