@@ -3,6 +3,7 @@
 pub mod config;
 pub mod connection;
 pub mod error;
+pub mod fanwaave_config;
 pub mod flavor;
 pub mod schema;
 
