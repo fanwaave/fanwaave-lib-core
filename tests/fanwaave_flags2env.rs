@@ -1,6 +1,4 @@
-use fanwaave_lib_core::fanwaave_config::{
-    parse_fanwaave_config, ConfigValue, ValueSource,
-};
+use fanwaave_lib_core::fanwaave_config::{parse_fanwaave_config, ConfigValue, ValueSource};
 use fanwaave_lib_core::fanwaave_flags2env::{
     resolve_fanwaave_config_from_argv, FanwaaveFlags2EnvError,
 };
