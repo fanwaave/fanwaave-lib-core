@@ -349,10 +349,11 @@ pub fn resolve_fanwaave_config(
             Some((value.as_str(), ValueSource::Argv))
         } else if let Some(value) = ambient.get(&binding.key) {
             Some((value.as_str(), ValueSource::Environment))
-        } else if let Some(value) = binding.default_value.as_deref() {
-            Some((value, ValueSource::Default))
         } else {
-            None
+            binding
+                .default_value
+                .as_deref()
+                .map(|value| (value, ValueSource::Default))
         };
 
         let Some((raw_value, source)) = resolved else {
