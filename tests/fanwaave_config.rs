@@ -259,14 +259,26 @@ secret = false
         ("TEST_COUNT".to_owned(), "42".to_owned()),
         ("TEST_RATIO".to_owned(), "0.25".to_owned()),
         ("TEST_PAYLOAD".to_owned(), "{\"ok\":true}".to_owned()),
-        ("TEST_ENDPOINT".to_owned(), "https://example.test/v1".to_owned()),
+        (
+            "TEST_ENDPOINT".to_owned(),
+            "https://example.test/v1".to_owned(),
+        ),
     ]);
     let resolved =
         resolve_fanwaave_config(&config, &ambient, &BTreeMap::new()).expect("config resolves");
 
-    assert_eq!(resolved.binding("switch").unwrap().value(), &ConfigValue::Bool(true));
-    assert_eq!(resolved.binding("count").unwrap().value(), &ConfigValue::Integer(42));
-    assert_eq!(resolved.binding("ratio").unwrap().value(), &ConfigValue::Double(0.25));
+    assert_eq!(
+        resolved.binding("switch").unwrap().value(),
+        &ConfigValue::Bool(true)
+    );
+    assert_eq!(
+        resolved.binding("count").unwrap().value(),
+        &ConfigValue::Integer(42)
+    );
+    assert_eq!(
+        resolved.binding("ratio").unwrap().value(),
+        &ConfigValue::Double(0.25)
+    );
     assert_eq!(
         resolved.binding("endpoint").unwrap().value(),
         &ConfigValue::Url("https://example.test/v1".to_owned())
@@ -303,6 +315,9 @@ secret = false
     let ambient = BTreeMap::from([("TEST_ENDPOINT".to_owned(), "not a url".to_owned())]);
     let error = resolve_fanwaave_config(&config, &ambient, &BTreeMap::new())
         .expect_err("invalid URL must fail");
-    assert_eq!(error, FanwaaveConfigError::InvalidUrl("endpoint".to_owned()));
+    assert_eq!(
+        error,
+        FanwaaveConfigError::InvalidUrl("endpoint".to_owned())
+    );
     assert!(!error.to_string().contains("not a url"));
 }

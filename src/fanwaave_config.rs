@@ -9,10 +9,8 @@ use url::Url;
 
 pub const FANWAAVE_CONFIG_FILENAME: &str = ".fanwaave-cfg.toml";
 pub const FANWAAVE_CONFIG_CONTRACT_REPOSITORY: &str = "fanwaave/fanwaave-interfaces";
-pub const FANWAAVE_CONFIG_CONTRACT_REVISION: &str =
-    "e27695091a5b8276543a6f435156a25043f297a9";
-pub const FANWAAVE_CONFIG_TJSV_REVISION: &str =
-    "4a5d049218adc2740d4cf78f612caf7f38f6f64c";
+pub const FANWAAVE_CONFIG_CONTRACT_REVISION: &str = "e27695091a5b8276543a6f435156a25043f297a9";
+pub const FANWAAVE_CONFIG_TJSV_REVISION: &str = "4a5d049218adc2740d4cf78f612caf7f38f6f64c";
 
 #[derive(Clone, Copy, Debug, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "lowercase")]
@@ -245,16 +243,24 @@ pub fn validate_fanwaave_config(config: &FanwaaveConfig) -> Result<(), FanwaaveC
 
     for binding in &config.env {
         if !is_binding_name(&binding.name) {
-            return Err(FanwaaveConfigError::InvalidBindingName(binding.name.clone()));
+            return Err(FanwaaveConfigError::InvalidBindingName(
+                binding.name.clone(),
+            ));
         }
         if !is_environment_key(&binding.key) {
-            return Err(FanwaaveConfigError::InvalidEnvironmentKey(binding.key.clone()));
+            return Err(FanwaaveConfigError::InvalidEnvironmentKey(
+                binding.key.clone(),
+            ));
         }
         if !names.insert(binding.name.as_str()) {
-            return Err(FanwaaveConfigError::DuplicateBindingName(binding.name.clone()));
+            return Err(FanwaaveConfigError::DuplicateBindingName(
+                binding.name.clone(),
+            ));
         }
         if !keys.insert(binding.key.as_str()) {
-            return Err(FanwaaveConfigError::DuplicateEnvironmentKey(binding.key.clone()));
+            return Err(FanwaaveConfigError::DuplicateEnvironmentKey(
+                binding.key.clone(),
+            ));
         }
         if binding.secret && binding.default_value.is_some() {
             return Err(FanwaaveConfigError::SecretDefault(binding.name.clone()));
@@ -343,10 +349,11 @@ pub fn resolve_fanwaave_config(
             Some((value.as_str(), ValueSource::Argv))
         } else if let Some(value) = ambient.get(&binding.key) {
             Some((value.as_str(), ValueSource::Environment))
-        } else if let Some(value) = binding.default_value.as_deref() {
-            Some((value, ValueSource::Default))
         } else {
-            None
+            binding
+                .default_value
+                .as_deref()
+                .map(|value| (value, ValueSource::Default))
         };
 
         let Some((raw_value, source)) = resolved else {
@@ -387,21 +394,21 @@ fn validate_mode(config: &FanwaaveConfig) -> Result<(), FanwaaveConfigError> {
     let server_enabled = config.server.as_ref().is_some_and(|server| server.enabled);
 
     match config.mode {
-        FanwaaveMode::Client if !client_enabled || server_enabled => Err(
-            FanwaaveConfigError::ModeRoleMismatch(
+        FanwaaveMode::Client if !client_enabled || server_enabled => {
+            Err(FanwaaveConfigError::ModeRoleMismatch(
                 "client mode requires client.enabled=true and server disabled".to_owned(),
-            ),
-        ),
-        FanwaaveMode::Server if !server_enabled || client_enabled => Err(
-            FanwaaveConfigError::ModeRoleMismatch(
+            ))
+        }
+        FanwaaveMode::Server if !server_enabled || client_enabled => {
+            Err(FanwaaveConfigError::ModeRoleMismatch(
                 "server mode requires server.enabled=true and client disabled".to_owned(),
-            ),
-        ),
-        FanwaaveMode::Hybrid if !client_enabled || !server_enabled => Err(
-            FanwaaveConfigError::ModeRoleMismatch(
+            ))
+        }
+        FanwaaveMode::Hybrid if !client_enabled || !server_enabled => {
+            Err(FanwaaveConfigError::ModeRoleMismatch(
                 "hybrid mode requires both client.enabled=true and server.enabled=true".to_owned(),
-            ),
-        ),
+            ))
+        }
         _ => Ok(()),
     }
 }
@@ -468,13 +475,17 @@ fn coerce_value(binding: &EnvBinding, raw_value: &str) -> Result<ConfigValue, Fa
 fn is_binding_name(value: &str) -> bool {
     let mut characters = value.chars();
     matches!(characters.next(), Some(first) if first.is_ascii_lowercase())
-        && characters.all(|character| character.is_ascii_lowercase() || character.is_ascii_digit() || character == '_')
+        && characters.all(|character| {
+            character.is_ascii_lowercase() || character.is_ascii_digit() || character == '_'
+        })
         && value.len() <= 64
 }
 
 fn is_environment_key(value: &str) -> bool {
     let mut characters = value.chars();
     matches!(characters.next(), Some(first) if first.is_ascii_uppercase() || first == '_')
-        && characters.all(|character| character.is_ascii_uppercase() || character.is_ascii_digit() || character == '_')
+        && characters.all(|character| {
+            character.is_ascii_uppercase() || character.is_ascii_digit() || character == '_'
+        })
         && value.len() <= 128
 }
