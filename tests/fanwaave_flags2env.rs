@@ -14,10 +14,8 @@ struct TestDir(PathBuf);
 impl TestDir {
     fn new() -> Self {
         let sequence = TEST_DIR_SEQUENCE.fetch_add(1, Ordering::Relaxed);
-        let path = std::env::temp_dir().join(format!(
-            "fanwaave-flags2env-{}-{sequence}",
-            process::id()
-        ));
+        let path =
+            std::env::temp_dir().join(format!("fanwaave-flags2env-{}-{sequence}", process::id()));
         let _ = fs::remove_dir_all(&path);
         fs::create_dir_all(&path).expect("create temporary contract root");
         Self(path)
