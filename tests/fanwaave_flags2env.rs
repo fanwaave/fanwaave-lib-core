@@ -3,6 +3,36 @@ use fanwaave_lib_core::fanwaave_flags2env::{
     resolve_fanwaave_config_from_argv, resolve_fanwaave_config_from_argv_at, FanwaaveFlags2EnvError,
 };
 use std::collections::BTreeMap;
+use std::path::{Path, PathBuf};
+use std::sync::atomic::{AtomicU64, Ordering};
+use std::{fs, process};
+
+static TEST_DIR_SEQUENCE: AtomicU64 = AtomicU64::new(0);
+
+struct TestDir(PathBuf);
+
+impl TestDir {
+    fn new() -> Self {
+        let sequence = TEST_DIR_SEQUENCE.fetch_add(1, Ordering::Relaxed);
+        let path = std::env::temp_dir().join(format!(
+            "fanwaave-flags2env-{}-{sequence}",
+            process::id()
+        ));
+        let _ = fs::remove_dir_all(&path);
+        fs::create_dir_all(&path).expect("create temporary contract root");
+        Self(path)
+    }
+
+    fn path(&self) -> &Path {
+        &self.0
+    }
+}
+
+impl Drop for TestDir {
+    fn drop(&mut self) {
+        let _ = fs::remove_dir_all(&self.0);
+    }
+}
 
 fn client_config() -> &'static str {
     r#"
@@ -73,8 +103,8 @@ fn bundled_flags2env_supplies_only_argv_overrides() {
 #[test]
 fn explicit_contract_root_is_independent_of_process_working_directory() {
     let config = parse_fanwaave_config(client_config()).expect("valid config");
-    let root = tempfile::tempdir().expect("temporary contract root");
-    std::fs::write(
+    let root = TestDir::new();
+    fs::write(
         root.path().join(".cli-flags.toml"),
         r#"
 [env]
@@ -116,7 +146,7 @@ type = "string"
 #[test]
 fn missing_explicit_contract_root_fails_closed_at_audit() {
     let config = parse_fanwaave_config(client_config()).expect("valid config");
-    let root = tempfile::tempdir().expect("temporary contract root");
+    let root = TestDir::new();
     let argv = vec!["fanwaave".to_owned()];
 
     let error = resolve_fanwaave_config_from_argv_at(
