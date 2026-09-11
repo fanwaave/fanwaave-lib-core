@@ -1,7 +1,6 @@
 use fanwaave_lib_core::fanwaave_config::{parse_fanwaave_config, ConfigValue, ValueSource};
 use fanwaave_lib_core::fanwaave_flags2env::{
-    resolve_fanwaave_config_from_argv, resolve_fanwaave_config_from_argv_at,
-    FanwaaveFlags2EnvError,
+    resolve_fanwaave_config_from_argv, resolve_fanwaave_config_from_argv_at, FanwaaveFlags2EnvError,
 };
 use std::collections::BTreeMap;
 
