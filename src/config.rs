@@ -53,21 +53,26 @@ mod tests {
 
     #[test]
     fn explicit_values_resolve_without_process_state() {
+        let postgres = CoreConfig::from_values("postgres://db/app", None)
+            .expect("valid PostgreSQL config");
         assert_eq!(
-            CoreConfig::from_values("postgres://db/app", None),
-            Ok(CoreConfig {
+            postgres,
+            CoreConfig {
                 database_url: "postgres://db/app".to_owned(),
                 flavor: DatabaseFlavor::PostgreSql,
                 read_only: true,
-            })
+            }
         );
+
+        let cockroach = CoreConfig::from_values("postgresql://cockroach/app", Some("0"))
+            .expect("valid CockroachDB config");
         assert_eq!(
-            CoreConfig::from_values("postgresql://cockroach/app", Some("0")),
-            Ok(CoreConfig {
+            cockroach,
+            CoreConfig {
                 database_url: "postgresql://cockroach/app".to_owned(),
                 flavor: DatabaseFlavor::CockroachDb,
                 read_only: false,
-            })
+            }
         );
     }
 
