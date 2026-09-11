@@ -38,6 +38,7 @@ jobs:
         uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
         with:
           ref: ${{ github.event.pull_request.head.sha || github.sha }}
+          persist-credentials: false
       - name: Verify exact pull-request head
         if: github.event_name == 'pull_request'
         run: test "$(git rev-parse HEAD)" = "${{ github.event.pull_request.head.sha }}"
@@ -56,7 +57,21 @@ jobs:
           assert '4a5d049218adc2740d4cf78f612caf7f38f6f64c' in source
           PY
       - name: Check formatting
-        run: cargo fmt --all -- --check
+        id: rustfmt
+        shell: bash
+        run: |
+          set +e
+          cargo fmt --all -- --check > rustfmt-output.txt 2>&1
+          status=$?
+          cat rustfmt-output.txt
+          exit "$status"
+      - name: Retain rustfmt diagnostics
+        if: ${{ failure() && steps.rustfmt.outcome == 'failure' }}
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: rustfmt-diagnostics
+          path: rustfmt-output.txt
+          if-no-files-found: error
       - name: Lint root crate
         run: cargo clippy --all-targets -- -D warnings
       - name: Test root library
