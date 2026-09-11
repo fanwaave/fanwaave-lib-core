@@ -53,8 +53,8 @@ mod tests {
 
     #[test]
     fn explicit_values_resolve_without_process_state() {
-        let postgres = CoreConfig::from_values("postgres://db/app", None)
-            .expect("valid PostgreSQL config");
+        let postgres =
+            CoreConfig::from_values("postgres://db/app", None).expect("valid PostgreSQL config");
         assert_eq!(
             postgres,
             CoreConfig {
