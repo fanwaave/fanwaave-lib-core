@@ -1,8 +1,36 @@
 use fanwaave_lib_core::fanwaave_config::{parse_fanwaave_config, ConfigValue, ValueSource};
 use fanwaave_lib_core::fanwaave_flags2env::{
-    resolve_fanwaave_config_from_argv, FanwaaveFlags2EnvError,
+    resolve_fanwaave_config_from_argv, resolve_fanwaave_config_from_argv_at, FanwaaveFlags2EnvError,
 };
 use std::collections::BTreeMap;
+use std::path::{Path, PathBuf};
+use std::sync::atomic::{AtomicU64, Ordering};
+use std::{fs, process};
+
+static TEST_DIR_SEQUENCE: AtomicU64 = AtomicU64::new(0);
+
+struct TestDir(PathBuf);
+
+impl TestDir {
+    fn new() -> Self {
+        let sequence = TEST_DIR_SEQUENCE.fetch_add(1, Ordering::Relaxed);
+        let path =
+            std::env::temp_dir().join(format!("fanwaave-flags2env-{}-{sequence}", process::id()));
+        let _ = fs::remove_dir_all(&path);
+        fs::create_dir_all(&path).expect("create temporary contract root");
+        Self(path)
+    }
+
+    fn path(&self) -> &Path {
+        &self.0
+    }
+}
+
+impl Drop for TestDir {
+    fn drop(&mut self) {
+        let _ = fs::remove_dir_all(&self.0);
+    }
+}
 
 fn client_config() -> &'static str {
     r#"
@@ -68,6 +96,68 @@ fn bundled_flags2env_supplies_only_argv_overrides() {
     assert_eq!(token.source(), ValueSource::Environment);
     assert!(token.is_secret());
     assert!(!format!("{token:?}").contains("test-only-secret"));
+}
+
+#[test]
+fn explicit_contract_root_is_independent_of_process_working_directory() {
+    let config = parse_fanwaave_config(client_config()).expect("valid config");
+    let root = TestDir::new();
+    fs::write(
+        root.path().join(".cli-flags.toml"),
+        r#"
+[env]
+files = []
+
+[parse]
+allow_unknown = false
+
+[flags.api_base_url]
+env = "FANWAAVE_API_BASE_URL"
+aliases = ["api-base-url"]
+type = "string"
+"#,
+    )
+    .expect("write flags2env contract");
+
+    let ambient = BTreeMap::from([(
+        "FANWAAVE_AUTH_TOKEN".to_owned(),
+        "test-only-secret".to_owned(),
+    )]);
+    let argv = vec![
+        "fanwaave".to_owned(),
+        "--api-base-url=https://argv.example".to_owned(),
+    ];
+
+    let resolved = resolve_fanwaave_config_from_argv_at(&config, &ambient, &argv, root.path())
+        .expect("explicit contract root must be honored");
+    let api = resolved.binding("api_base_url").expect("API binding");
+    assert_eq!(api.source(), ValueSource::Argv);
+    assert_eq!(
+        api.value(),
+        &ConfigValue::Url("https://argv.example".to_owned())
+    );
+    let token = resolved.binding("auth_token").expect("secret binding");
+    assert_eq!(token.source(), ValueSource::Environment);
+    assert!(token.is_secret());
+}
+
+#[test]
+fn missing_explicit_contract_root_fails_closed_at_audit() {
+    let config = parse_fanwaave_config(client_config()).expect("valid config");
+    let root = TestDir::new();
+    let argv = vec!["fanwaave".to_owned()];
+
+    let error = resolve_fanwaave_config_from_argv_at(
+        &config,
+        &BTreeMap::from([(
+            "FANWAAVE_AUTH_TOKEN".to_owned(),
+            "test-only-secret".to_owned(),
+        )]),
+        &argv,
+        root.path(),
+    )
+    .expect_err("missing explicit flags2env contract must fail closed");
+    assert!(matches!(error, FanwaaveFlags2EnvError::Audit));
 }
 
 #[test]
