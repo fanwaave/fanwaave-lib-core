@@ -67,7 +67,7 @@ impl PaddedEmbedding {
     pub fn from_model_output(
         provider: EmbeddingProvider,
         model: &str,
-        mut values: Vec<f32>,
+        values: Vec<f32>,
     ) -> Result<Self, EmbeddingContractError> {
         let dimensions = values.len();
         validate_model_dimensions(provider, model, dimensions)?;
@@ -81,9 +81,15 @@ impl PaddedEmbedding {
         if squared_norm <= f64::EPSILON {
             return Err(EmbeddingContractError::ZeroVector);
         }
-        values.resize(EMBEDDING_STORAGE_DIMENSIONS, 0.0);
+        // `validate_model_dimensions` bounds `dimensions` by the storage width, so
+        // taking exactly that many slots pads with zeros and never truncates.
+        let padded = values
+            .into_iter()
+            .chain(std::iter::repeat(0.0))
+            .take(EMBEDDING_STORAGE_DIMENSIONS)
+            .collect::<Box<[f32]>>();
         Ok(Self {
-            values: values.into_boxed_slice(),
+            values: padded,
             original_dimensions: dimensions,
             l2_norm: squared_norm.sqrt(),
         })

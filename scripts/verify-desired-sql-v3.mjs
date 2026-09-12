@@ -42,89 +42,70 @@ const SEARCH_PATH_SENSITIVE = [
   'array_fill', 'cardinality',
 ];
 
-const findSql = (dir, out = []) => {
-  let entries;
-  try { entries = readdirSync(dir); } catch { return out; }
-  for (const e of entries) {
+// Every .sql path under dir, in directory order; an unreadable dir contributes nothing.
+const findSql = (dir) => {
+  const entries = (() => { try { return readdirSync(dir); } catch { return []; } })();
+  return entries.flatMap((e) => {
     const p = join(dir, e);
-    if (statSync(p).isDirectory()) findSql(p, out);
-    else if (e.endsWith('.sql')) out.push(p);
-  }
-  return out;
+    if (statSync(p).isDirectory()) return findSql(p);
+    return e.endsWith('.sql') ? [p] : [];
+  });
 };
 
 // Function bodies are dollar-quoted. Capture the tag so a body containing a
 // different tag does not terminate it early.
-function* sqlFunctionBodies(text) {
+function sqlFunctionBodies(text) {
   const re = /CREATE\s+(?:OR\s+REPLACE\s+)?FUNCTION\s+([\w".]+)\s*\(([\s\S]*?)\)\s*RETURNS([\s\S]*?)AS\s+(\$[A-Za-z_]*\$)/gi;
-  let m;
-  while ((m = re.exec(text)) !== null) {
+  return [...text.matchAll(re)].flatMap((m) => {
     const [full, name, , preamble, tag] = m;
     const bodyStart = m.index + full.length;
     const end = text.indexOf(tag, bodyStart);
-    if (end === -1) continue;
-    yield {
+    if (end === -1) return [];
+    return [{
       name,
       preamble,
       body: text.slice(bodyStart, end),
       language: /LANGUAGE\s+(\w+)/i.exec(preamble)?.[1]?.toLowerCase() ?? '',
       hasSetSearchPath: /\bSET\s+search_path\s*=/i.test(preamble),
       line: text.slice(0, m.index).split('\n').length,
-    };
-  }
+    }];
+  });
 }
 
-// True when the identifier at this position is already schema-qualified.
-const isQualified = (text, index) => {
-  let i = index - 1;
-  while (i >= 0 && /\s/.test(text[i])) i -= 1;
-  return i >= 0 && text[i] === '.';
-};
+// True when the identifier at this position is already schema-qualified: the
+// nearest non-whitespace character before it is a dot.
+const isQualified = (text, index) => /\.\s*$/.test(text.slice(0, index));
+
+// Every unqualified call of callee inside one function body.
+const unqualifiedCalls = (file, fn, callee) =>
+  [...fn.body.matchAll(new RegExp(`\\b${callee}\\s*\\(`, 'g'))]
+    .filter((m) => !isQualified(fn.body, m.index))
+    .map((m) => ({
+      file,
+      line: fn.line + fn.body.slice(0, m.index).split('\n').length - 1,
+      fn: fn.name,
+      callee,
+    }));
 
 function checkUnqualifiedCalls(file, text) {
-  const problems = [];
-  for (const fn of sqlFunctionBodies(text)) {
-    // A plpgsql body resolves at execution with the caller's path too, but the
-    // restore path only evaluates CHECK constraints, which must be LANGUAGE SQL
-    // or plpgsql; both are covered. A SET search_path clause makes it safe.
-    if (fn.hasSetSearchPath) continue;
-    for (const callee of SEARCH_PATH_SENSITIVE) {
-      const re = new RegExp(`\\b${callee}\\s*\\(`, 'g');
-      let m;
-      while ((m = re.exec(fn.body)) !== null) {
-        if (isQualified(fn.body, m.index)) continue;
-        problems.push({
-          file,
-          line: fn.line + fn.body.slice(0, m.index).split('\n').length - 1,
-          fn: fn.name,
-          callee,
-        });
-      }
-    }
-  }
-  return problems;
+  // A plpgsql body resolves at execution with the caller's path too, but the
+  // restore path only evaluates CHECK constraints, which must be LANGUAGE SQL
+  // or plpgsql; both are covered. A SET search_path clause makes it safe.
+  return sqlFunctionBodies(text)
+    .filter((fn) => !fn.hasSetSearchPath)
+    .flatMap((fn) => SEARCH_PATH_SENSITIVE.flatMap((callee) => unqualifiedCalls(file, fn, callee)));
 }
 
 // A CREATE POLICY is guarded when the nearest preceding statement boundary is a
 // DO block opener rather than a semicolon.
 function checkBarePolicies(file, text) {
-  const problems = [];
-  const re = /CREATE\s+POLICY\s+([\w"]+)/gi;
-  let m;
-  while ((m = re.exec(text)) !== null) {
+  return [...text.matchAll(/CREATE\s+POLICY\s+([\w"]+)/gi)].flatMap((m) => {
     const before = text.slice(0, m.index);
     const lastSemi = before.lastIndexOf(';');
     const lastDo = before.search(/DO\s+\$[A-Za-z_]*\$\s*BEGIN[^;]*$/i);
     const guarded = lastDo !== -1 && lastDo > lastSemi;
-    if (!guarded) {
-      problems.push({
-        file,
-        line: before.split('\n').length,
-        policy: m[1],
-      });
-    }
-  }
-  return problems;
+    return guarded ? [] : [{ file, line: before.split('\n').length, policy: m[1] }];
+  });
 }
 
 const files = ROOTS.flatMap((r) => findSql(r));
@@ -136,16 +117,13 @@ if (files.length === 0) {
   process.exit(0);
 }
 
-let unqualified = [];
-let bare = [];
-for (const f of files) {
-  const text = readFileSync(f, 'utf8');
-  // CockroachDB has no pgvector and no pg_restore; these checks are about
-  // PostgreSQL restore and replay semantics.
-  if (/cockroach/i.test(f)) continue;
-  unqualified = unqualified.concat(checkUnqualifiedCalls(f, text));
-  bare = bare.concat(checkBarePolicies(f, text));
-}
+// CockroachDB has no pgvector and no pg_restore; these checks are about
+// PostgreSQL restore and replay semantics.
+const sources = files
+  .filter((f) => !/cockroach/i.test(f))
+  .map((f) => ({ file: f, text: readFileSync(f, 'utf8') }));
+const unqualified = sources.flatMap(({ file, text }) => checkUnqualifiedCalls(file, text));
+const bare = sources.flatMap(({ file, text }) => checkBarePolicies(file, text));
 
 if (unqualified.length === 0 && bare.length === 0) {
   console.log(`verify-desired-sql-v3: ${files.length} SQL file(s) conform.`);
