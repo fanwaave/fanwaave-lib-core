@@ -37,3 +37,5 @@ Functional programming is mostly the following:
 + composition
 + effects pushed outward
 + illegal states excluded by types
+
+- Build values, don't mutate them: functions return new values instead of filling `&mut`/pointer parameters or caller-owned collections, in every language here (Rust, Go, TypeScript, Dart, Gleam). Deliberate exceptions on hot paths carry a `HOT-PATH (imperative by design)` comment with the reason. See [`FUNCTIONAL-STYLE.md`](./FUNCTIONAL-STYLE.md).

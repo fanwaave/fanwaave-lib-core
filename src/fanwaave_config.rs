@@ -133,16 +133,18 @@ impl ResolvedBinding {
 
 impl fmt::Debug for ResolvedBinding {
     fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
-        let mut debug = formatter.debug_struct("ResolvedBinding");
-        debug.field("env_key", &self.env_key);
-        debug.field("source", &self.source);
-        debug.field("secret", &self.secret);
-        if self.secret {
-            debug.field("value", &"[REDACTED]");
+        let value: &dyn fmt::Debug = if self.secret {
+            &"[REDACTED]"
         } else {
-            debug.field("value", &self.value);
-        }
-        debug.finish()
+            &self.value
+        };
+        formatter
+            .debug_struct("ResolvedBinding")
+            .field("env_key", &self.env_key)
+            .field("source", &self.source)
+            .field("secret", &self.secret)
+            .field("value", value)
+            .finish()
     }
 }
 
@@ -237,36 +239,11 @@ pub fn validate_fanwaave_config(config: &FanwaaveConfig) -> Result<(), FanwaaveC
         return Err(FanwaaveConfigError::UnsafeFlagsContract);
     }
 
-    let mut names = BTreeSet::new();
-    let mut keys = BTreeSet::new();
-    let mut by_name = BTreeMap::new();
-
-    for binding in &config.env {
-        if !is_binding_name(&binding.name) {
-            return Err(FanwaaveConfigError::InvalidBindingName(
-                binding.name.clone(),
-            ));
-        }
-        if !is_environment_key(&binding.key) {
-            return Err(FanwaaveConfigError::InvalidEnvironmentKey(
-                binding.key.clone(),
-            ));
-        }
-        if !names.insert(binding.name.as_str()) {
-            return Err(FanwaaveConfigError::DuplicateBindingName(
-                binding.name.clone(),
-            ));
-        }
-        if !keys.insert(binding.key.as_str()) {
-            return Err(FanwaaveConfigError::DuplicateEnvironmentKey(
-                binding.key.clone(),
-            ));
-        }
-        if binding.secret && binding.default_value.is_some() {
-            return Err(FanwaaveConfigError::SecretDefault(binding.name.clone()));
-        }
-        by_name.insert(binding.name.as_str(), binding);
-    }
+    let index = config
+        .env
+        .iter()
+        .try_fold(BindingIndex::default(), BindingIndex::with)?;
+    let by_name = index.by_name;
 
     validate_mode(config)?;
 
@@ -321,15 +298,69 @@ pub fn validate_fanwaave_config(config: &FanwaaveConfig) -> Result<(), FanwaaveC
     Ok(())
 }
 
+/// The binding table built while validating `config.env`: every binding seen so
+/// far, keyed by name, plus the environment keys already claimed. Validation is a
+/// `try_fold` over this value; [`BindingIndex::with`] returns a new index or the
+/// first error for the binding.
+#[derive(Default)]
+struct BindingIndex<'a> {
+    by_name: BTreeMap<&'a str, &'a EnvBinding>,
+    keys: BTreeSet<&'a str>,
+}
+
+impl<'a> BindingIndex<'a> {
+    fn with(self, binding: &'a EnvBinding) -> Result<Self, FanwaaveConfigError> {
+        if !is_binding_name(&binding.name) {
+            return Err(FanwaaveConfigError::InvalidBindingName(
+                binding.name.clone(),
+            ));
+        }
+        if !is_environment_key(&binding.key) {
+            return Err(FanwaaveConfigError::InvalidEnvironmentKey(
+                binding.key.clone(),
+            ));
+        }
+        if self.by_name.contains_key(binding.name.as_str()) {
+            return Err(FanwaaveConfigError::DuplicateBindingName(
+                binding.name.clone(),
+            ));
+        }
+        if self.keys.contains(binding.key.as_str()) {
+            return Err(FanwaaveConfigError::DuplicateEnvironmentKey(
+                binding.key.clone(),
+            ));
+        }
+        if binding.secret && binding.default_value.is_some() {
+            return Err(FanwaaveConfigError::SecretDefault(binding.name.clone()));
+        }
+        Ok(Self {
+            by_name: self
+                .by_name
+                .into_iter()
+                .chain(std::iter::once((binding.name.as_str(), binding)))
+                .collect(),
+            keys: self
+                .keys
+                .into_iter()
+                .chain(std::iter::once(binding.key.as_str()))
+                .collect(),
+        })
+    }
+}
+
+/// The ambient environment with every argv override applied. Ambient entries an
+/// override shadows are dropped rather than overwritten, so the result is built
+/// from two disjoint sources and neither input is touched.
 pub fn merge_environment(
     ambient: &BTreeMap<String, String>,
     argv_overrides: &BTreeMap<String, String>,
 ) -> BTreeMap<String, String> {
-    let mut merged = ambient.clone();
-    for (key, value) in argv_overrides {
-        merged.insert(key.clone(), value.clone());
-    }
-    merged
+    ambient
+        .iter()
+        .filter(|(key, _)| !argv_overrides.contains_key(*key))
+        .chain(argv_overrides.iter())
+        .map(|(key, value)| (key.clone(), value.clone()))
+        .collect()
 }
 
 pub fn resolve_fanwaave_config(
@@ -339,54 +370,64 @@ pub fn resolve_fanwaave_config(
 ) -> Result<ResolvedFanwaaveConfig, FanwaaveConfigError> {
     validate_fanwaave_config(config)?;
 
-    let mut values = BTreeMap::new();
-    for binding in &config.env {
-        if binding.secret && argv_overrides.contains_key(&binding.key) {
-            return Err(FanwaaveConfigError::SecretFromArgv(binding.name.clone()));
-        }
-
-        let resolved = if let Some(value) = argv_overrides.get(&binding.key) {
-            Some((value.as_str(), ValueSource::Argv))
-        } else if let Some(value) = ambient.get(&binding.key) {
-            Some((value.as_str(), ValueSource::Environment))
-        } else {
-            binding
-                .default_value
-                .as_deref()
-                .map(|value| (value, ValueSource::Default))
-        };
-
-        let Some((raw_value, source)) = resolved else {
-            if binding.required {
-                return Err(FanwaaveConfigError::MissingRequiredBinding(
-                    binding.name.clone(),
-                ));
-            }
-            continue;
-        };
-
-        if binding.required && raw_value.is_empty() {
-            return Err(FanwaaveConfigError::MissingRequiredBinding(
-                binding.name.clone(),
-            ));
-        }
-
-        let value = coerce_value(binding, raw_value)?;
-        values.insert(
-            binding.name.clone(),
-            ResolvedBinding {
-                env_key: binding.key.clone(),
-                value,
-                source,
-                secret: binding.secret,
-            },
-        );
-    }
+    let values = config
+        .env
+        .iter()
+        .map(|binding| resolve_binding(binding, ambient, argv_overrides))
+        .filter_map(Result::transpose)
+        .collect::<Result<BTreeMap<_, _>, _>>()?;
 
     Ok(ResolvedFanwaaveConfig {
         mode: config.mode,
         values,
     })
+}
+
+/// Resolve one binding to its `(name, ResolvedBinding)` entry: `Ok(None)` when an
+/// optional binding has no value anywhere, an error when a required one is missing
+/// or a value is malformed.
+fn resolve_binding(
+    binding: &EnvBinding,
+    ambient: &BTreeMap<String, String>,
+    argv_overrides: &BTreeMap<String, String>,
+) -> Result<Option<(String, ResolvedBinding)>, FanwaaveConfigError> {
+    if binding.secret && argv_overrides.contains_key(&binding.key) {
+        return Err(FanwaaveConfigError::SecretFromArgv(binding.name.clone()));
+    }
+
+    let resolved = if let Some(value) = argv_overrides.get(&binding.key) {
+        Some((value.as_str(), ValueSource::Argv))
+    } else if let Some(value) = ambient.get(&binding.key) {
+        Some((value.as_str(), ValueSource::Environment))
+    } else {
+        binding
+            .default_value
+            .as_deref()
+            .map(|value| (value, ValueSource::Default))
+    };
+
+    let missing_required = || FanwaaveConfigError::MissingRequiredBinding(binding.name.clone());
+    let Some((raw_value, source)) = resolved else {
+        return if binding.required {
+            Err(missing_required())
+        } else {
+            Ok(None)
+        };
+    };
+    if binding.required && raw_value.is_empty() {
+        return Err(missing_required());
+    }
+
+    let value = coerce_value(binding, raw_value)?;
+    Ok(Some((
+        binding.name.clone(),
+        ResolvedBinding {
+            env_key: binding.key.clone(),
+            value,
+            source,
+            secret: binding.secret,
+        },
+    )))
 }
 
 fn validate_mode(config: &FanwaaveConfig) -> Result<(), FanwaaveConfigError> {
@@ -473,18 +514,22 @@ fn coerce_value(binding: &EnvBinding, raw_value: &str) -> Result<ConfigValue, Fa
 }
 
 fn is_binding_name(value: &str) -> bool {
-    let mut characters = value.chars();
-    matches!(characters.next(), Some(first) if first.is_ascii_lowercase())
-        && characters.all(|character| {
+    value
+        .chars()
+        .next()
+        .is_some_and(|first| first.is_ascii_lowercase())
+        && value.chars().skip(1).all(|character| {
             character.is_ascii_lowercase() || character.is_ascii_digit() || character == '_'
         })
         && value.len() <= 64
 }
 
 fn is_environment_key(value: &str) -> bool {
-    let mut characters = value.chars();
-    matches!(characters.next(), Some(first) if first.is_ascii_uppercase() || first == '_')
-        && characters.all(|character| {
+    value
+        .chars()
+        .next()
+        .is_some_and(|first| first.is_ascii_uppercase() || first == '_')
+        && value.chars().skip(1).all(|character| {
             character.is_ascii_uppercase() || character.is_ascii_digit() || character == '_'
         })
         && value.len() <= 128
