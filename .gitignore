@@ -10,3 +10,6 @@
 !.env.example
 *.sqlite
 Cargo.lock
+
+# typespec-json-schema-validator comparison evidence (generated; never an authority)
+.typespec-json-schema-validator/
