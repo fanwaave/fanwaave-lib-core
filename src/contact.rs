@@ -99,7 +99,7 @@ impl ContactPayload {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct EnqueueContactJob {
     pub idempotency_key: String,
-    pub payload: ContactPayload,
+    pub contact: ContactPayload,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub campaign_id: Option<String>,
     #[serde(default)]
