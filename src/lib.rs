@@ -2,6 +2,7 @@
 
 pub mod config;
 pub mod connection;
+pub mod contact;
 pub mod error;
 pub mod fanwaave_config;
 pub mod fanwaave_flags2env;
