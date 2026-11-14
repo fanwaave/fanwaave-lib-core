@@ -21,10 +21,14 @@ impl CoreConfig {
         read_only_env: Option<&str>,
     ) -> Result<Self, CoreError> {
         let database_url = database_url.into();
-        if !(database_url.starts_with("postgres://") || database_url.starts_with("postgresql://")) {
+        // Match the actual parsed host, not an arbitrary substring in the
+        // password, database name or query parameters.
+        let parsed = url::Url::parse(&database_url).map_err(|_| CoreError::InvalidDatabaseUrl)?;
+        if !matches!(parsed.scheme(), "postgres" | "postgresql") || parsed.host_str().is_none() {
             return Err(CoreError::InvalidDatabaseUrl);
         }
-        let flavor = if database_url.contains("cockroach") {
+        let hostname = parsed.host_str().expect("hostname checked above");
+        let flavor = if hostname.to_ascii_lowercase().contains("cockroach") {
             DatabaseFlavor::CockroachDb
         } else {
             DatabaseFlavor::PostgreSql
@@ -77,10 +81,33 @@ mod tests {
     }
 
     #[test]
+    fn only_the_database_hostname_determines_flavor() {
+        let postgres = CoreConfig::from_values(
+            "postgres://user:cockroach@postgres.example/tenant_cockroach",
+            None,
+        )
+        .expect("valid PostgreSQL URL");
+        assert_eq!(postgres.flavor, DatabaseFlavor::PostgreSql);
+
+        let cockroach = CoreConfig::from_values(
+            "postgresql://user:password@eu.cockroachdb.example/app",
+            None,
+        )
+        .expect("valid CockroachDB URL");
+        assert_eq!(cockroach.flavor, DatabaseFlavor::CockroachDb);
+    }
+
+    #[test]
     fn invalid_database_urls_fail_before_a_config_is_constructed() {
         assert!(matches!(
             CoreConfig::from_values("mysql://db/app", Some("0")),
             Err(CoreError::InvalidDatabaseUrl)
         ));
+        for url in ["postgres://", "postgresql:///no-host", "not a URL"] {
+            assert!(matches!(
+                CoreConfig::from_values(url, None),
+                Err(CoreError::InvalidDatabaseUrl)
+            ));
+        }
     }
 }
