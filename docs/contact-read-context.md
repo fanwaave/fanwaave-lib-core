@@ -71,3 +71,14 @@ This draft is **not** a completed ores_transport::DirectReader integration:
 - Private Cargo admission issue #18 and ores-cli release #457 remain separate.
 
 Never promote a test-only SELECT role or credential into production.
+
+## Integration-test feature admission
+
+The real PostgreSQL integration tests are gated by the non-default
+`db-integration-tests` Cargo feature, which implies `read-only`. The dedicated
+source CI selects both features and supplies actual PostgreSQL 16, role grants,
+and test DSNs. Other repository workflows that compile or test the default
+library never run DB-dependent tests without database infrastructure. This is
+an explicit opt-in to testing infrastructure, **not** a skip within the
+admitted database test job. That job runs the four real DB tests and fails
+if its DSNs, migration, or role are unavailable.

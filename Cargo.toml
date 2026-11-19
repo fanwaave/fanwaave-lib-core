@@ -11,6 +11,7 @@
     read-only = ["dep:sqlx", "dep:subtle", "dep:uuid"]
     read-write = ["read-only"]
     migrate = ["read-write"]
+    db-integration-tests = ["read-only"]
     diesel-projection = ["dep:chrono", "dep:diesel", "dep:pgvector", "dep:uuid"]
     sea-orm-projection = ["dep:sea-orm"]
     orm-projections = ["diesel-projection", "sea-orm-projection"]

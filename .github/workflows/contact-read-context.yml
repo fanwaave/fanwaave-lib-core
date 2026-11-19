@@ -84,6 +84,6 @@ jobs:
       - name: Compile with no default features (read API must not leak)
         run: cargo check --all-targets --no-default-features
       - name: Compile and run real read-only database contract
-        run: cargo test --all-targets --no-default-features --features read-only
+        run: cargo test --all-targets --no-default-features --features read-only,db-integration-tests
       - name: Strict Clippy of actual read-only library and tests
-        run: cargo clippy --all-targets --no-default-features --features read-only -- -D warnings
+        run: cargo clippy --all-targets --no-default-features --features read-only,db-integration-tests -- -D warnings

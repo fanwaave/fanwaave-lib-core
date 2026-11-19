@@ -1,5 +1,5 @@
 #![forbid(unsafe_code)]
-#![cfg(feature = "read-only")]
+#![cfg(feature = "db-integration-tests")]
 
 use fanwaave_lib_core::{
     config::CoreConfig,
