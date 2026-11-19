@@ -5,8 +5,8 @@
 //! A caller supplies an explicit per-operation authorizer. A distinct DB role
 //! must independently hold SELECT without any table mutation privileges.
 
-use std::sync::Arc;
 use sqlx::{postgres::PgPoolOptions, PgPool};
+use std::sync::Arc;
 use uuid::Uuid;
 
 use crate::{
@@ -41,11 +41,7 @@ pub enum ReadOperation {
 /// Domain-owned authorization hook. No permissive/default implementation is
 /// provided. The decision must cover the specific operation and its record id.
 pub trait ReadAuthorizer: Send + Sync {
-    fn authorize(
-        &self,
-        authorization: &str,
-        operation: ReadOperation,
-    ) -> Result<(), ReadError>;
+    fn authorize(&self, authorization: &str, operation: ReadOperation) -> Result<(), ReadError>;
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq, thiserror::Error)]
@@ -115,7 +111,10 @@ impl ReadContext {
             .fetch_optional(&mut *transaction)
             .await
             .map_err(|_| ReadError::Database)?;
-        transaction.commit().await.map_err(|_| ReadError::Database)?;
+        transaction
+            .commit()
+            .await
+            .map_err(|_| ReadError::Database)?;
         found.map(decode_contact_job).transpose()
     }
 }
@@ -208,14 +207,27 @@ mod tests {
                 "email".to_owned(),
                 "sendgrid".to_owned(),
                 status.to_owned(),
-                0, 8, None, None,
+                0,
+                8,
+                None,
+                None,
             );
             assert!(decode_contact_job(row).is_ok(), "{status}");
         }
         let invalid = (
-            Uuid::nil(), "key".to_owned(), "email".to_owned(),
-            "sendgrid".to_owned(), "unknown".to_owned(), 0, 8, None, None,
+            Uuid::nil(),
+            "key".to_owned(),
+            "email".to_owned(),
+            "sendgrid".to_owned(),
+            "unknown".to_owned(),
+            0,
+            8,
+            None,
+            None,
         );
-        assert!(matches!(decode_contact_job(invalid), Err(ReadError::InvalidStoredData)));
+        assert!(matches!(
+            decode_contact_job(invalid),
+            Err(ReadError::InvalidStoredData)
+        ));
     }
 }

@@ -8,7 +8,7 @@ use fanwaave_lib_core::{
     contact::{ContactChannel, ContactJobStatus},
     read_context::{ReadAuthorizer, ReadContext, ReadError, ReadOperation},
 };
-use sqlx::{PgPool, postgres::PgPoolOptions};
+use sqlx::{postgres::PgPoolOptions, PgPool};
 use uuid::Uuid;
 
 // Test-only authorization. Production must supply a reviewed, real identity
@@ -18,11 +18,7 @@ struct ScopedTestAuthorizer {
 }
 
 impl ReadAuthorizer for ScopedTestAuthorizer {
-    fn authorize(
-        &self,
-        authorization: &str,
-        operation: ReadOperation,
-    ) -> Result<(), ReadError> {
+    fn authorize(&self, authorization: &str, operation: ReadOperation) -> Result<(), ReadError> {
         match operation {
             ReadOperation::ContactJob { id }
                 if id == self.allowed_id && authorization == "Bearer ephemeral-ci-read" =>
@@ -107,7 +103,9 @@ async fn actual_postgres_enforces_role_authorization_and_read_only_queries() {
         Err(ReadError::Unauthorized)
     ));
     assert!(matches!(
-        context.get_contact_job(Uuid::nil(), "Bearer ephemeral-ci-read").await,
+        context
+            .get_contact_job(Uuid::nil(), "Bearer ephemeral-ci-read")
+            .await,
         Err(ReadError::Unauthorized)
     ));
 
@@ -129,11 +127,13 @@ async fn actual_postgres_enforces_role_authorization_and_read_only_queries() {
         .bind(job_id)
         .execute(&reader_pool)
         .await;
-    assert!(attempted_write.is_err(), "the reader role must not update contact jobs");
+    assert!(
+        attempted_write.is_err(),
+        "the reader role must not update contact jobs"
+    );
 
     // A writer role must be rejected even if config.read_only says true.
-    let admin_config = CoreConfig::from_values(admin_url, None)
-        .expect("valid admin config");
+    let admin_config = CoreConfig::from_values(admin_url, None).expect("valid admin config");
     assert!(matches!(
         ReadContext::connect(&admin_config, policy.clone()).await,
         Err(ReadError::PrivilegedDatabaseRole)
