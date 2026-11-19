@@ -1,0 +1,89 @@
+name: contact-read-context
+
+on:
+  pull_request:
+    paths:
+      - "src/read_context.rs"
+      - "src/connection.rs"
+      - "src/contact.rs"
+      - "src/lib.rs"
+      - "Cargo.toml"
+      - "migrations/0002_contact_delivery.sql"
+      - "tests/contact_read_context.rs"
+      - ".github/workflows/contact-read-context.yml"
+      - "docs/contact-read-context.md"
+  push:
+    branches: [dev]
+    paths:
+      - "src/read_context.rs"
+      - "src/connection.rs"
+      - "src/contact.rs"
+      - "src/lib.rs"
+      - "Cargo.toml"
+      - "migrations/0002_contact_delivery.sql"
+      - "tests/contact_read_context.rs"
+      - ".github/workflows/contact-read-context.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  read-context:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: postgres
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres -d postgres"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      PGPASSWORD: postgres
+      FANWAAVE_READ_TEST_DSN: postgres://fanwaave_read_ci:read_ci_test_password@127.0.0.1:5432/postgres
+      FANWAAVE_READ_ADMIN_TEST_DSN: postgres://postgres:postgres@127.0.0.1:5432/postgres
+    steps:
+      - name: Checkout exact source head, without persistence of credentials
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+          persist-credentials: false
+      - name: Install Rust with fmt and Clippy
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt, clippy
+      - name: Verify exact candidate SHA
+        env:
+          EXPECTED_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+        run: test "$(git rev-parse HEAD)" = "$EXPECTED_SHA"
+      - name: Check source formatting
+        run: cargo fmt --all -- --check
+      - name: Prepare canonical schema with a limited database role
+        shell: bash
+        run: |
+          set -euo pipefail
+          psql -h 127.0.0.1 -U postgres -d postgres -v ON_ERROR_STOP=1 \
+            -f migrations/0002_contact_delivery.sql
+          psql -h 127.0.0.1 -U postgres -d postgres -v ON_ERROR_STOP=1 <<'SQL'
+          CREATE ROLE fanwaave_read_ci LOGIN PASSWORD 'read_ci_test_password';
+          GRANT USAGE ON SCHEMA public TO fanwaave_read_ci;
+          INSERT INTO public.contact_jobs
+            (id, idempotency_key, channel, provider, payload)
+          VALUES
+            ('00000000-0000-4000-8000-000000000001',
+             'fixture-contact-job-0001', 'email', 'sendgrid', '{"to":"ci-only"}'::jsonb);
+          GRANT SELECT ON TABLE public.contact_jobs TO fanwaave_read_ci;
+          SQL
+      - name: Compile with no default features (read API must not leak)
+        run: cargo check --all-targets --no-default-features
+      - name: Compile and run real read-only database contract
+        run: cargo test --all-targets --no-default-features --features read-only
+      - name: Strict Clippy of actual read-only library and tests
+        run: cargo clippy --all-targets --no-default-features --features read-only -- -D warnings
