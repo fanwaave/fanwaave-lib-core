@@ -22,8 +22,14 @@ const PREVIOUS_SECRET: &str = "test-only-fanwaave-prev-secret-32-chars";
 
 fn keys() -> [ReadVerifierKey<'static>; 2] {
     [
-        ReadVerifierKey { kid: "current", secret: TEST_SECRET.as_bytes() },
-        ReadVerifierKey { kid: "previous", secret: PREVIOUS_SECRET.as_bytes() },
+        ReadVerifierKey {
+            kid: "current",
+            secret: TEST_SECRET.as_bytes(),
+        },
+        ReadVerifierKey {
+            kid: "previous",
+            secret: PREVIOUS_SECRET.as_bytes(),
+        },
     ]
 }
 
@@ -172,7 +178,10 @@ async fn key_rotation_accepts_overlap_but_refuses_retired_key() {
         .expect("reader with overlapping known keys opens");
     assert!(reader.get_contact_job(expected_uuid(), &old).await.is_ok());
 
-    let current = [ReadVerifierKey { kid: "current", secret: TEST_SECRET.as_bytes() }];
+    let current = [ReadVerifierKey {
+        kid: "current",
+        secret: TEST_SECRET.as_bytes(),
+    }];
     let rotated = ReadContext::connect(&config, &current)
         .await
         .expect("reader with retired previous key opens");
@@ -217,8 +226,8 @@ async fn refuses_elevated_roles_even_if_contact_table_itself_is_readonly() {
         ReadContext::connect(&extra, &keys()).await,
         Err(ReadError::ExcessivePrivileges)
     ));
-    let admin_dsn = std::env::var("FANWAAVE_READ_ADMIN_TEST_DSN")
-        .expect("CI must supply a database owner DSN");
+    let admin_dsn =
+        std::env::var("FANWAAVE_READ_ADMIN_TEST_DSN").expect("CI must supply a database owner DSN");
     let admin = CoreConfig::from_values(admin_dsn, None).expect("admin DSN parses");
     assert!(matches!(
         ReadContext::connect(&admin, &keys()).await,
@@ -236,7 +245,10 @@ async fn refuses_invalid_keyring_and_config_before_database() {
         ReadContext::connect(&writable, &keys()).await,
         Err(ReadError::NotReadOnly)
     ));
-    let short = [ReadVerifierKey { kid: "short", secret: b"short" }];
+    let short = [ReadVerifierKey {
+        kid: "short",
+        secret: b"short",
+    }];
     assert!(matches!(
         ReadContext::connect(&config, &short).await,
         Err(ReadError::InvalidReadCredential)
@@ -246,8 +258,14 @@ async fn refuses_invalid_keyring_and_config_before_database() {
         Err(ReadError::InvalidReadCredential)
     ));
     let duplicate = [
-        ReadVerifierKey { kid: "same", secret: TEST_SECRET.as_bytes() },
-        ReadVerifierKey { kid: "same", secret: PREVIOUS_SECRET.as_bytes() },
+        ReadVerifierKey {
+            kid: "same",
+            secret: TEST_SECRET.as_bytes(),
+        },
+        ReadVerifierKey {
+            kid: "same",
+            secret: PREVIOUS_SECRET.as_bytes(),
+        },
     ];
     assert!(matches!(
         ReadContext::connect(&config, &duplicate).await,

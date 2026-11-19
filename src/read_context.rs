@@ -94,7 +94,10 @@ impl ReadContext {
     ///
     /// # Errors
     /// A typed, credential-safe failure on policy, connectivity or schema.
-    pub async fn connect(config: &CoreConfig, keys: &[ReadVerifierKey<'_>]) -> Result<Self, ReadError> {
+    pub async fn connect(
+        config: &CoreConfig,
+        keys: &[ReadVerifierKey<'_>],
+    ) -> Result<Self, ReadError> {
         if !config.read_only {
             return Err(ReadError::NotReadOnly);
         }
@@ -278,7 +281,9 @@ impl ReadContext {
         let verified = decode::<ContactReadGrantClaims>(supplied, key, &validation)
             .map_err(|_| ReadError::Unauthorized)?;
         let claims = verified.claims;
-        claims.validate_shape().map_err(|_| ReadError::Unauthorized)?;
+        claims
+            .validate_shape()
+            .map_err(|_| ReadError::Unauthorized)?;
         let now = SystemTime::now()
             .duration_since(UNIX_EPOCH)
             .map_err(|_| ReadError::Unauthorized)?
@@ -294,7 +299,6 @@ impl ReadContext {
         }
         Ok(())
     }
-
 }
 
 fn parse_channel(raw: &str) -> Result<ContactChannel, ReadError> {
