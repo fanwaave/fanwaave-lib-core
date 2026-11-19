@@ -114,7 +114,7 @@ The reader also checks PostgreSQL's actual server version after connecting,
 so hostname-based config classification alone cannot admit CockroachDB.
 
 This draft pins fanwaave-interfaces commit
-591a4629aedffcd9f69dfb76e040849e96657c55 (draft contract PR #24).
+9fe7e98120a4fade4092fc5cf2eb555041fb26ef (draft contract PR #24).
 After independent review and integration, update the pin to the merged,
 immutable approved interface revision. The web server and private transport
 source have not been repinned, and nothing is production-deployed.
