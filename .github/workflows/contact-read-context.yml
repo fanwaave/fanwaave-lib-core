@@ -1,0 +1,69 @@
+name: contact read-only database contract
+
+on:
+  pull_request:
+    paths:
+      - "Cargo.toml"
+      - "src/read_context.rs"
+      - "src/contact.rs"
+      - "src/lib.rs"
+      - "migrations/0002_contact_delivery.sql"
+      - "tests/read_context_postgres.rs"
+      - ".github/workflows/contact-read-context.yml"
+  push:
+    branches: [main, dev]
+    paths:
+      - "Cargo.toml"
+      - "src/read_context.rs"
+      - "src/contact.rs"
+      - "src/lib.rs"
+      - "migrations/0002_contact_delivery.sql"
+      - "tests/read_context_postgres.rs"
+      - ".github/workflows/contact-read-context.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  live-postgres:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: postgres
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres -d postgres"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      FANWAAVE_TEST_DATABASE_URL: postgres://postgres:postgres@127.0.0.1:5432/postgres
+    steps:
+      - name: Check out exact candidate
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+          persist-credentials: false
+      - name: Verify checked out commit
+        env:
+          EXPECTED_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+        run: test "$(git rev-parse HEAD)" = "$EXPECTED_SHA"
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt, clippy
+      - name: Check Rust formatting
+        run: cargo fmt --all -- --check
+      - name: Compile the opt-in real PostgreSQL reader
+        run: cargo check --all-targets --features postgres-read
+      - name: Strict Clippy for the reader and tests
+        run: cargo clippy --all-targets --features postgres-read -- -D warnings
+      - name: Run read-only role and actual data query integration
+        run: cargo test --features postgres-read --test read_context_postgres -- --test-threads=1
+      - name: Run library unit tests with the reader enabled
+        run: cargo test --features postgres-read --lib
