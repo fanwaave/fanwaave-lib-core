@@ -16,7 +16,7 @@ pub use connection::CorePool;
 pub use error::CoreError;
 pub use flavor::DatabaseFlavor;
 #[cfg(feature = "read-only")]
-pub use read_context::{ReadContext, ReadError, ReadVerifierKey};
+pub use read_context::{ReadAuthorizer, ReadContext, ReadError, ReadOperation, ReadVerifierKey};
 pub use schema::SCHEMA_REVISION;
 
 pub mod embedding_contract;

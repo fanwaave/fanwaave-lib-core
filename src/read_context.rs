@@ -67,7 +67,8 @@ pub struct ReadVerifierKey<'a> {
 
 // Canonical, explicitly projected query, shared by runtime and regression
 // checks. Only the bound UUID is supplied; never interpolate caller input.
-const GET_CONTACT_JOB_SQL: &str = "SELECT idempotency_key, channel, provider, status, attempt_count, \
+const GET_CONTACT_JOB_SQL: &str =
+    "SELECT idempotency_key, channel, provider, status, attempt_count, \
     max_attempts, provider_message_id, last_error \
     FROM public.contact_jobs WHERE id = $1";
 
@@ -75,12 +76,36 @@ const MAX_GRANT_BYTES: usize = 4_096;
 const MAX_GRANT_SECONDS: i64 = 300;
 const MAX_KEY_COUNT: usize = 8;
 
+/// Exact read operation admitted by the caller's independent policy.
+/// Only the caller's checked principal may read a concrete job ID.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum ReadOperation {
+    ContactJob { id: Uuid },
+}
+
+/// Required service-owned authorization policy, applied AFTER signature
+/// verification and BEFORE any SQL. There is no default/allow-all implementation.
+///
+/// The policy must prove the verified principal is permitted to access the
+/// specific job, including any revocation and tenant/resource restrictions.
+/// A validly signed token is not by itself sufficient for a database read.
+pub trait ReadAuthorizer: Send + Sync {
+    /// # Errors
+    /// Return Unauthorized when the principal lacks explicit resource access.
+    fn authorize(
+        &self,
+        verified: &ContactReadGrantClaims,
+        operation: ReadOperation,
+    ) -> Result<(), ReadError>;
+}
+
 /// A verified resource-bound credential, not a tenant-level SQL policy.
 /// A future tenant-specific contract needs separately reviewed authority.
 #[derive(Clone)]
 pub struct ReadContext {
     pool: PgPool,
     trusted_keys: Arc<BTreeMap<String, DecodingKey>>,
+    authorizer: Arc<dyn ReadAuthorizer>,
 }
 
 impl fmt::Debug for ReadContext {
@@ -103,6 +128,7 @@ impl ReadContext {
     pub async fn connect(
         config: &CoreConfig,
         keys: &[ReadVerifierKey<'_>],
+        authorizer: Arc<dyn ReadAuthorizer>,
     ) -> Result<Self, ReadError> {
         if !config.read_only {
             return Err(ReadError::NotReadOnly);
@@ -217,6 +243,7 @@ impl ReadContext {
         Ok(Self {
             pool,
             trusted_keys: Arc::new(trusted_keys),
+            authorizer,
         })
     }
 
@@ -233,7 +260,9 @@ impl ReadContext {
         // A fresh read-only transaction adds an independent defense to the
         // per-connection read-only default and the SELECT-only role.
         // The authenticated, job-bound authorization still occurs before SQL.
-        self.authorize(authorization, job_id)?;
+        let claims = self.verify_grant(authorization, job_id)?;
+        self.authorizer
+            .authorize(&claims, ReadOperation::ContactJob { id: job_id })?;
         let mut transaction = self.pool.begin().await.map_err(|_| ReadError::Database)?;
         sqlx::query("SET TRANSACTION READ ONLY")
             .execute(&mut *transaction)
@@ -244,7 +273,10 @@ impl ReadContext {
             .fetch_optional(&mut *transaction)
             .await
             .map_err(|_| ReadError::Database)?;
-        transaction.commit().await.map_err(|_| ReadError::Database)?;
+        transaction
+            .commit()
+            .await
+            .map_err(|_| ReadError::Database)?;
 
         row.map(|job| {
             if job.attempt_count < 0 || job.max_attempts <= 0 {
@@ -265,7 +297,11 @@ impl ReadContext {
         .transpose()
     }
 
-    fn authorize(&self, header: &str, requested_job: Uuid) -> Result<(), ReadError> {
+    fn verify_grant(
+        &self,
+        header: &str,
+        requested_job: Uuid,
+    ) -> Result<ContactReadGrantClaims, ReadError> {
         let supplied = header
             .strip_prefix("Bearer ")
             .ok_or(ReadError::Unauthorized)?;
@@ -308,7 +344,7 @@ impl ReadContext {
         {
             return Err(ReadError::Unauthorized);
         }
-        Ok(())
+        Ok(claims)
     }
 }
 

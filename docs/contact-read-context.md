@@ -83,6 +83,26 @@ an explicit opt-in to testing infrastructure, **not** a skip within the
 admitted database test job. That job runs the four real DB tests and fails
 if its DSNs, migration, or role are unavailable.
 
+## Reconciled mandatory authorization from draft PR #28
+
+The proposed core #29 now requires an injected `ReadAuthorizer` for **every**
+reader. Its input is a cryptographically verified contact-read grant plus an
+explicit `ReadOperation::ContactJob { id }`, and it must independently
+approve the authenticated principal for that exact job. No implicit
+permit-all/default implementation exists. This preserves the useful
+per-operation resource-policy boundary proposed by the competing draft #28,
+while retaining #29's signature, expiry, scope and database-role checks.
+The policy is called after JWT signature verification and before opening a
+transaction or querying the database. Real PostgreSQL tests deny a correctly
+signed grant for a job or principal disallowed by the injected policy.
+
+Each lookup also explicitly executes `SET TRANSACTION READ ONLY` inside a
+fresh SQL transaction, independently of per-connection read-only defaults
+and the database's SELECT-only role. SQL projection and known-enum
+regressions from #28 were brought into #29. This does NOT by itself
+implement a production policy issuer or tenant model; the trusted service
+must provide that policy when constructing `ReadContext`.
+
 ## Scoped grant verification and expanded database privilege audit
 
 The former shared, unscoped service bearer has been removed. The read context

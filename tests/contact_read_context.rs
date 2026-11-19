@@ -8,11 +8,14 @@ use fanwaave_lib_core::{
     config::CoreConfig,
     contact::{ContactChannel, ContactJobStatus, ContactProvider},
     flavor::DatabaseFlavor,
-    ReadContext, ReadError, ReadVerifierKey,
+    ReadAuthorizer, ReadContext, ReadError, ReadOperation, ReadVerifierKey,
 };
 use jsonwebtoken::{encode, Algorithm, EncodingKey, Header};
 use sqlx::PgPool;
-use std::time::{SystemTime, UNIX_EPOCH};
+use std::{
+    sync::Arc,
+    time::{SystemTime, UNIX_EPOCH},
+};
 use uuid::Uuid;
 
 const EXPECTED_ID: &str = "00000000-0000-4000-8000-000000000001";
@@ -31,6 +34,33 @@ fn keys() -> [ReadVerifierKey<'static>; 2] {
             secret: PREVIOUS_SECRET.as_bytes(),
         },
     ]
+}
+
+// Test-only scoped policy. A correctly signed token for an unrelated
+// principal or record must still be denied. Production policy must come from
+// an independently reviewed identity/resource authority.
+struct ScopedTestAuthorizer;
+
+impl ReadAuthorizer for ScopedTestAuthorizer {
+    fn authorize(
+        &self,
+        verified: &ContactReadGrantClaims,
+        operation: ReadOperation,
+    ) -> Result<(), ReadError> {
+        match operation {
+            ReadOperation::ContactJob { id }
+                if verified.sub == "test-only-service-principal"
+                    && (id.to_string() == EXPECTED_ID || id.to_string() == MISSING_ID) =>
+            {
+                Ok(())
+            }
+            _ => Err(ReadError::Unauthorized),
+        }
+    }
+}
+
+fn policy() -> Arc<dyn ReadAuthorizer> {
+    Arc::new(ScopedTestAuthorizer)
 }
 
 fn read_config() -> CoreConfig {
@@ -84,7 +114,7 @@ fn signed_grant(
 #[tokio::test]
 async fn reads_real_contact_job_and_unknown_id_is_none() {
     let config = read_config();
-    let reader = ReadContext::connect(&config, &keys())
+    let reader = ReadContext::connect(&config, &keys(), policy())
         .await
         .expect("live SELECT-only reader opens");
     let auth = signed_grant(expected_uuid(), "current", TEST_SECRET, |_| {});
@@ -119,7 +149,7 @@ async fn reads_real_contact_job_and_unknown_id_is_none() {
 #[tokio::test]
 async fn denies_unscoped_wrong_job_expired_tampered_and_unknown_keys() {
     let config = read_config();
-    let reader = ReadContext::connect(&config, &keys())
+    let reader = ReadContext::connect(&config, &keys(), policy())
         .await
         .expect("reader opens");
 
@@ -173,7 +203,7 @@ async fn denies_unscoped_wrong_job_expired_tampered_and_unknown_keys() {
 async fn key_rotation_accepts_overlap_but_refuses_retired_key() {
     let config = read_config();
     let old = signed_grant(expected_uuid(), "previous", PREVIOUS_SECRET, |_| {});
-    let reader = ReadContext::connect(&config, &keys())
+    let reader = ReadContext::connect(&config, &keys(), policy())
         .await
         .expect("reader with overlapping known keys opens");
     assert!(reader.get_contact_job(expected_uuid(), &old).await.is_ok());
@@ -182,12 +212,36 @@ async fn key_rotation_accepts_overlap_but_refuses_retired_key() {
         kid: "current",
         secret: TEST_SECRET.as_bytes(),
     }];
-    let rotated = ReadContext::connect(&config, &current)
+    let rotated = ReadContext::connect(&config, &current, policy())
         .await
         .expect("reader with retired previous key opens");
     assert_eq!(
         rotated.get_contact_job(expected_uuid(), &old).await.err(),
         Some(ReadError::Unauthorized)
+    );
+}
+
+#[tokio::test]
+async fn denies_properly_signed_grants_when_independent_policy_denies_resource() {
+    let config = read_config();
+    let reader = ReadContext::connect(&config, &keys(), policy())
+        .await
+        .expect("reader with a mandatory scoped policy opens");
+    let excluded = Uuid::parse_str("00000000-0000-4000-8000-000000000010")
+        .expect("fixed UUID");
+    let signed_but_unauthorized = signed_grant(excluded, "current", TEST_SECRET, |_| {});
+    assert_eq!(
+        reader.get_contact_job(excluded, &signed_but_unauthorized).await.err(),
+        Some(ReadError::Unauthorized),
+        "valid signing key cannot override a resource policy"
+    );
+    let wrong_principal = signed_grant(expected_uuid(), "current", TEST_SECRET, |claims| {
+        claims.sub = "not-approved-by-policy".into();
+    });
+    assert_eq!(
+        reader.get_contact_job(expected_uuid(), &wrong_principal).await.err(),
+        Some(ReadError::Unauthorized),
+        "a correctly signed principal still needs explicit policy approval"
     );
 }
 
@@ -223,17 +277,17 @@ async fn refuses_elevated_roles_even_if_contact_table_itself_is_readonly() {
         .expect("CI must supply a role with write privileges on an unrelated table");
     let extra = CoreConfig::from_values(writable_role, None).expect("DSN parses");
     assert!(matches!(
-        ReadContext::connect(&extra, &keys()).await,
+        ReadContext::connect(&extra, &keys(), policy()).await,
         Err(ReadError::ExcessivePrivileges)
     ));
     let admin_dsn =
         std::env::var("FANWAAVE_READ_ADMIN_TEST_DSN").expect("CI must supply a database owner DSN");
     let admin = CoreConfig::from_values(admin_dsn, None).expect("admin DSN parses");
     assert!(matches!(
-        ReadContext::connect(&admin, &keys()).await,
+        ReadContext::connect(&admin, &keys(), policy()).await,
         Err(ReadError::ExcessivePrivileges)
     ));
-    assert!(ReadContext::connect(&config, &keys()).await.is_ok());
+    assert!(ReadContext::connect(&config, &keys(), policy()).await.is_ok());
 }
 
 #[tokio::test]
@@ -242,7 +296,7 @@ async fn refuses_invalid_keyring_and_config_before_database() {
     let mut writable = config.clone();
     writable.read_only = false;
     assert!(matches!(
-        ReadContext::connect(&writable, &keys()).await,
+        ReadContext::connect(&writable, &keys(), policy()).await,
         Err(ReadError::NotReadOnly)
     ));
     let short = [ReadVerifierKey {
@@ -250,11 +304,11 @@ async fn refuses_invalid_keyring_and_config_before_database() {
         secret: b"short",
     }];
     assert!(matches!(
-        ReadContext::connect(&config, &short).await,
+        ReadContext::connect(&config, &short, policy()).await,
         Err(ReadError::InvalidReadCredential)
     ));
     assert!(matches!(
-        ReadContext::connect(&config, &[]).await,
+        ReadContext::connect(&config, &[], policy()).await,
         Err(ReadError::InvalidReadCredential)
     ));
     let duplicate = [
@@ -268,13 +322,13 @@ async fn refuses_invalid_keyring_and_config_before_database() {
         },
     ];
     assert!(matches!(
-        ReadContext::connect(&config, &duplicate).await,
+        ReadContext::connect(&config, &duplicate, policy()).await,
         Err(ReadError::InvalidReadCredential)
     ));
     let mut cockroach = config.clone();
     cockroach.flavor = DatabaseFlavor::CockroachDb;
     assert!(matches!(
-        ReadContext::connect(&cockroach, &keys()).await,
+        ReadContext::connect(&cockroach, &keys(), policy()).await,
         Err(ReadError::UnsupportedFlavor)
     ));
 }
