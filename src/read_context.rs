@@ -65,6 +65,12 @@ pub struct ReadVerifierKey<'a> {
     pub secret: &'a [u8],
 }
 
+// Canonical, explicitly projected query, shared by runtime and regression
+// checks. Only the bound UUID is supplied; never interpolate caller input.
+const GET_CONTACT_JOB_SQL: &str = "SELECT idempotency_key, channel, provider, status, attempt_count, \
+    max_attempts, provider_message_id, last_error \
+    FROM public.contact_jobs WHERE id = $1";
+
 const MAX_GRANT_BYTES: usize = 4_096;
 const MAX_GRANT_SECONDS: i64 = 300;
 const MAX_KEY_COUNT: usize = 8;
@@ -224,16 +230,21 @@ impl ReadContext {
         job_id: Uuid,
         authorization: &str,
     ) -> Result<Option<ContactJobView>, ReadError> {
+        // A fresh read-only transaction adds an independent defense to the
+        // per-connection read-only default and the SELECT-only role.
+        // The authenticated, job-bound authorization still occurs before SQL.
         self.authorize(authorization, job_id)?;
-        let row = sqlx::query_as::<_, ContactJobRow>(
-            "SELECT idempotency_key, channel, provider, status, attempt_count, \
-                max_attempts, provider_message_id, last_error \
-             FROM public.contact_jobs WHERE id = $1",
-        )
-        .bind(job_id)
-        .fetch_optional(&self.pool)
-        .await
-        .map_err(|_| ReadError::Database)?;
+        let mut transaction = self.pool.begin().await.map_err(|_| ReadError::Database)?;
+        sqlx::query("SET TRANSACTION READ ONLY")
+            .execute(&mut *transaction)
+            .await
+            .map_err(|_| ReadError::Database)?;
+        let row = sqlx::query_as::<_, ContactJobRow>(GET_CONTACT_JOB_SQL)
+            .bind(job_id)
+            .fetch_optional(&mut *transaction)
+            .await
+            .map_err(|_| ReadError::Database)?;
+        transaction.commit().await.map_err(|_| ReadError::Database)?;
 
         row.map(|job| {
             if job.attempt_count < 0 || job.max_attempts <= 0 {
@@ -347,6 +358,24 @@ mod tests {
         assert_eq!(parse_status("wrong"), Err(ReadError::InvalidData));
         assert_eq!(parse_channel("Email"), Err(ReadError::InvalidData));
         assert_eq!(parse_provider("internal"), Err(ReadError::InvalidData));
+    }
+
+    #[test]
+    fn contact_job_sql_uses_bind_parameter_and_canonical_projection() {
+        assert!(GET_CONTACT_JOB_SQL.contains("FROM public.contact_jobs"));
+        assert!(GET_CONTACT_JOB_SQL.contains("WHERE id = $1"));
+        assert!(!GET_CONTACT_JOB_SQL.contains("SELECT *"));
+        assert!(!GET_CONTACT_JOB_SQL.contains("WHERE id = '"));
+    }
+
+    #[test]
+    fn all_known_contact_job_statuses_decode_without_fallback() {
+        for status in ["queued", "leased", "retry", "sent", "dead", "cancelled"] {
+            assert!(parse_status(status).is_ok(), "{status}");
+        }
+        for unknown in ["unknown", "SENT", "", "waiting"] {
+            assert_eq!(parse_status(unknown), Err(ReadError::InvalidData));
+        }
     }
 
     #[test]
