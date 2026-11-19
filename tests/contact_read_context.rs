@@ -227,11 +227,13 @@ async fn denies_properly_signed_grants_when_independent_policy_denies_resource()
     let reader = ReadContext::connect(&config, &keys(), policy())
         .await
         .expect("reader with a mandatory scoped policy opens");
-    let excluded = Uuid::parse_str("00000000-0000-4000-8000-000000000010")
-        .expect("fixed UUID");
+    let excluded = Uuid::parse_str("00000000-0000-4000-8000-000000000010").expect("fixed UUID");
     let signed_but_unauthorized = signed_grant(excluded, "current", TEST_SECRET, |_| {});
     assert_eq!(
-        reader.get_contact_job(excluded, &signed_but_unauthorized).await.err(),
+        reader
+            .get_contact_job(excluded, &signed_but_unauthorized)
+            .await
+            .err(),
         Some(ReadError::Unauthorized),
         "valid signing key cannot override a resource policy"
     );
@@ -239,7 +241,10 @@ async fn denies_properly_signed_grants_when_independent_policy_denies_resource()
         claims.sub = "not-approved-by-policy".into();
     });
     assert_eq!(
-        reader.get_contact_job(expected_uuid(), &wrong_principal).await.err(),
+        reader
+            .get_contact_job(expected_uuid(), &wrong_principal)
+            .await
+            .err(),
         Some(ReadError::Unauthorized),
         "a correctly signed principal still needs explicit policy approval"
     );
@@ -287,7 +292,9 @@ async fn refuses_elevated_roles_even_if_contact_table_itself_is_readonly() {
         ReadContext::connect(&admin, &keys(), policy()).await,
         Err(ReadError::ExcessivePrivileges)
     ));
-    assert!(ReadContext::connect(&config, &keys(), policy()).await.is_ok());
+    assert!(ReadContext::connect(&config, &keys(), policy())
+        .await
+        .is_ok());
 }
 
 #[tokio::test]
