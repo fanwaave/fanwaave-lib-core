@@ -82,3 +82,39 @@ library never run DB-dependent tests without database infrastructure. This is
 an explicit opt-in to testing infrastructure, **not** a skip within the
 admitted database test job. That job runs the four real DB tests and fails
 if its DSNs, migration, or role are unavailable.
+
+## Scoped grant verification and expanded database privilege audit
+
+The former shared, unscoped service bearer has been removed. The read context
+now accepts a bounded allowlist of verification keys. Each authorization
+request must be a signed HS256 JWT using a known JOSE kid, with the exact
+issuer, audience, nonempty principal, contact_job.read scope, canonical
+contact-job UUID matching the requested resource, and required issue,
+not-before, expiry, and request ID fields. The maximum grant lifetime is
+five minutes; unknown signing keys, altered payloads, expired grants and
+grants for a different job fail before any SQL lookup. A rotation window may
+accept two configured keys. Removing a key from a newly created context
+immediately rejects grants issued with that key. The principal-to-job policy
+is enforced by the independently trusted issuer, NOT by reading an unsigned
+claim or by this database's tenant schema (there is no tenant_id).
+
+The verification keys MUST come from a trusted secret manager or approved
+runtime configuration and MUST NOT be sent to public clients. This library
+**never signs or issues** grants; the CI-only Rust test helper issues fixture
+JWTs. Bearer tokens are replayable until expiry, so short TTL, TLS and
+upstream issuer security remain mandatory. No jti-replay cache exists yet.
+
+Database admission also rejects PostgreSQL roles with elevated role flags,
+CREATE rights on the database or application schemas, and write permissions
+on any application table (not merely contact_jobs). The source CI creates an
+additional SELECT-capable principal with UPDATE on an unrelated table and
+asserts it cannot open the reader. Application checks DO NOT replace database
+GRANT policy or prove the safety of arbitrary SECURITY DEFINER functions.
+The reader also checks PostgreSQL's actual server version after connecting,
+so hostname-based config classification alone cannot admit CockroachDB.
+
+This draft pins fanwaave-interfaces commit
+591a4629aedffcd9f69dfb76e040849e96657c55 (draft contract PR #24).
+After independent review and integration, update the pin to the merged,
+immutable approved interface revision. The web server and private transport
+source have not been repinned, and nothing is production-deployed.

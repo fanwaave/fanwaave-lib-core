@@ -3,9 +3,17 @@
 //! This module exports no arbitrary SQL, migration, or mutation method.
 //! Errors intentionally never expose database URLs or secret-bearing text.
 
+use fanwaave_interfaces::contact_read::{
+    ContactReadGrantClaims, CONTACT_READ_AUDIENCE, CONTACT_READ_ISSUER,
+};
+use jsonwebtoken::{decode, decode_header, Algorithm, DecodingKey, Validation};
 use sqlx::{postgres::PgPoolOptions, PgPool};
-use std::{fmt, sync::Arc};
-use subtle::ConstantTimeEq;
+use std::{
+    collections::BTreeMap,
+    fmt,
+    sync::Arc,
+    time::{Duration, SystemTime, UNIX_EPOCH},
+};
 use uuid::Uuid;
 
 use crate::{
@@ -18,7 +26,7 @@ use crate::{
 pub enum ReadError {
     #[error("read-only database configuration is required")]
     NotReadOnly,
-    #[error("a strong dedicated read credential is required")]
+    #[error("valid trusted contact read verification keys are required")]
     InvalidReadCredential,
     #[error("database flavor is not verified for read-only operation")]
     UnsupportedFlavor,
@@ -50,12 +58,23 @@ struct ContactJobRow {
     last_error: Option<String>,
 }
 
-/// A service-scoped read credential, NOT a per-tenant authorization system.
+/// One configured, trusted HMAC verifier key (not an untrusted JWT header).
+/// The trusted auth service, not this library, issues job-specific grants.
+pub struct ReadVerifierKey<'a> {
+    pub kid: &'a str,
+    pub secret: &'a [u8],
+}
+
+const MAX_GRANT_BYTES: usize = 4_096;
+const MAX_GRANT_SECONDS: i64 = 300;
+const MAX_KEY_COUNT: usize = 8;
+
+/// A verified resource-bound credential, not a tenant-level SQL policy.
 /// A future tenant-specific contract needs separately reviewed authority.
 #[derive(Clone)]
 pub struct ReadContext {
     pool: PgPool,
-    read_secret: Arc<str>,
+    trusted_keys: Arc<BTreeMap<String, DecodingKey>>,
 }
 
 impl fmt::Debug for ReadContext {
@@ -75,12 +94,28 @@ impl ReadContext {
     ///
     /// # Errors
     /// A typed, credential-safe failure on policy, connectivity or schema.
-    pub async fn connect(config: &CoreConfig, read_secret: &str) -> Result<Self, ReadError> {
+    pub async fn connect(config: &CoreConfig, keys: &[ReadVerifierKey<'_>]) -> Result<Self, ReadError> {
         if !config.read_only {
             return Err(ReadError::NotReadOnly);
         }
-        if read_secret.trim().len() < 32 {
+        if keys.is_empty() || keys.len() > MAX_KEY_COUNT {
             return Err(ReadError::InvalidReadCredential);
+        }
+        let mut trusted_keys = BTreeMap::new();
+        for key in keys {
+            if key.kid.is_empty()
+                || key.kid.len() > 64
+                || !key
+                    .kid
+                    .bytes()
+                    .all(|b| b.is_ascii_alphanumeric() || b == b'-' || b == b'_')
+                || key.secret.len() < 32
+                || trusted_keys
+                    .insert(key.kid.to_owned(), DecodingKey::from_secret(key.secret))
+                    .is_some()
+            {
+                return Err(ReadError::InvalidReadCredential);
+            }
         }
         if config.flavor != DatabaseFlavor::PostgreSql {
             return Err(ReadError::UnsupportedFlavor);
@@ -88,6 +123,7 @@ impl ReadContext {
 
         let pool = PgPoolOptions::new()
             .max_connections(4)
+            .acquire_timeout(Duration::from_secs(5))
             .after_connect(|connection, _metadata| {
                 Box::pin(async move {
                     sqlx::query("SET default_transaction_read_only = on")
@@ -99,6 +135,49 @@ impl ReadContext {
             .connect(&config.database_url)
             .await
             .map_err(|_| ReadError::Database)?;
+
+        // The URL classifier is only a hint: verify actual connected engine.
+        let (version,): (String,) = sqlx::query_as("SELECT version()")
+            .fetch_one(&pool)
+            .await
+            .map_err(|_| ReadError::Database)?;
+        if !version.starts_with("PostgreSQL ") {
+            return Err(ReadError::UnsupportedFlavor);
+        }
+
+        // Reject elevated roles and mutation/DDL privileges across *all*
+        // non-system schemas, not merely the target contact_jobs table.
+        let (unsafe_role,): (bool,) = sqlx::query_as(
+            "SELECT
+                 EXISTS (
+                   SELECT 1 FROM pg_roles
+                   WHERE rolname = current_user
+                     AND (rolsuper OR rolcreatedb OR rolcreaterole
+                          OR rolreplication OR rolbypassrls)
+                 )
+                 OR has_database_privilege(current_database(), 'CREATE')
+                 OR EXISTS (
+                   SELECT 1 FROM pg_namespace n
+                   WHERE n.nspname <> 'information_schema'
+                     AND n.nspname !~ '^pg_'
+                     AND has_schema_privilege(n.oid, 'CREATE')
+                 )
+                 OR EXISTS (
+                   SELECT 1 FROM pg_class c
+                   JOIN pg_namespace n ON n.oid = c.relnamespace
+                   WHERE n.nspname <> 'information_schema'
+                     AND n.nspname !~ '^pg_'
+                     AND c.relkind IN ('r', 'p', 'v', 'm', 'f')
+                     AND has_table_privilege(c.oid,
+                        'INSERT, UPDATE, DELETE, TRUNCATE, REFERENCES, TRIGGER')
+                 )",
+        )
+        .fetch_one(&pool)
+        .await
+        .map_err(|_| ReadError::Database)?;
+        if unsafe_role {
+            return Err(ReadError::ExcessivePrivileges);
+        }
 
         let (can_read, can_modify): (bool, bool) = sqlx::query_as(
             "SELECT \
@@ -128,7 +207,7 @@ impl ReadContext {
 
         Ok(Self {
             pool,
-            read_secret: Arc::from(read_secret),
+            trusted_keys: Arc::new(trusted_keys),
         })
     }
 
@@ -142,7 +221,7 @@ impl ReadContext {
         job_id: Uuid,
         authorization: &str,
     ) -> Result<Option<ContactJobView>, ReadError> {
-        self.authorize(authorization)?;
+        self.authorize(authorization, job_id)?;
         let row = sqlx::query_as::<_, ContactJobRow>(
             "SELECT idempotency_key, channel, provider, status, attempt_count, \
                 max_attempts, provider_message_id, last_error \
@@ -172,17 +251,50 @@ impl ReadContext {
         .transpose()
     }
 
-    fn authorize(&self, header: &str) -> Result<(), ReadError> {
+    fn authorize(&self, header: &str, requested_job: Uuid) -> Result<(), ReadError> {
         let supplied = header
             .strip_prefix("Bearer ")
             .ok_or(ReadError::Unauthorized)?;
-        if supplied.is_empty()
-            || !bool::from(supplied.as_bytes().ct_eq(self.read_secret.as_bytes()))
+        if supplied.is_empty() || supplied.len() > MAX_GRANT_BYTES {
+            return Err(ReadError::Unauthorized);
+        }
+        let jose = decode_header(supplied).map_err(|_| ReadError::Unauthorized)?;
+        if jose.alg != Algorithm::HS256 {
+            return Err(ReadError::Unauthorized);
+        }
+        let kid = jose.kid.ok_or(ReadError::Unauthorized)?;
+        let key = self.trusted_keys.get(&kid).ok_or(ReadError::Unauthorized)?;
+        let mut validation = Validation::new(Algorithm::HS256);
+        validation.set_issuer(&[CONTACT_READ_ISSUER]);
+        validation.set_audience(&[CONTACT_READ_AUDIENCE]);
+        validation.validate_nbf = true;
+        validation.leeway = 0;
+        validation.required_spec_claims = [
+            "iss", "aud", "sub", "scope", "job_id", "iat", "nbf", "exp", "jti",
+        ]
+        .into_iter()
+        .map(String::from)
+        .collect();
+        let verified = decode::<ContactReadGrantClaims>(supplied, key, &validation)
+            .map_err(|_| ReadError::Unauthorized)?;
+        let claims = verified.claims;
+        claims.validate_shape().map_err(|_| ReadError::Unauthorized)?;
+        let now = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .map_err(|_| ReadError::Unauthorized)?
+            .as_secs() as i64;
+        let life = claims.exp.checked_sub(claims.iat);
+        if life.is_none_or(|duration| duration <= 0 || duration > MAX_GRANT_SECONDS)
+            || claims.iat > now.saturating_add(30)
+            || claims.exp <= now
+            || claims.nbf > now
+            || claims.job_id != requested_job.to_string()
         {
             return Err(ReadError::Unauthorized);
         }
         Ok(())
     }
+
 }
 
 fn parse_channel(raw: &str) -> Result<ContactChannel, ReadError> {
