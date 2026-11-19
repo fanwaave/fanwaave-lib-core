@@ -8,9 +8,10 @@
 
     [features]
     default = ["read-only"]
-    read-only = []
+    read-only = ["dep:sqlx", "dep:uuid", "dep:jsonwebtoken", "dep:fanwaave-interfaces"]
     read-write = ["read-only"]
     migrate = ["read-write"]
+    db-integration-tests = ["read-only"]
     diesel-projection = ["dep:chrono", "dep:diesel", "dep:pgvector", "dep:uuid"]
     sea-orm-projection = ["dep:sea-orm"]
     orm-projections = ["diesel-projection", "sea-orm-projection"]
@@ -21,12 +22,18 @@
     flags2env = { git = "https://github.com/flags-2-env/flags-2-env", rev = "c7f720d7501921b5a1b42c395b5a6fe271f24332", package = "flags2env" }
     pgvector = { version = "=0.4.2", features = ["diesel", "halfvec", "serde"], optional = true }
     sea-orm = { version = "=1.1.20", default-features = false, features = ["macros", "postgres-vector", "with-chrono", "with-json", "with-uuid"], optional = true }
+    fanwaave-interfaces = { git = "https://github.com/fanwaave/fanwaave-interfaces.git", rev = "9fe7e98120a4fade4092fc5cf2eb555041fb26ef", optional = true }
+    jsonwebtoken = { version = "9", optional = true }
+    sqlx = { version = "0.8", default-features = false, features = ["json", "macros", "postgres", "runtime-tokio-rustls", "uuid"], optional = true }
     serde = { version = "1", features = ["derive"] }
     serde_json = "1"
     thiserror = "2"
     toml = "0.8"
     url = "2"
     uuid = { version = "1", features = ["serde"], optional = true }
+
+[dev-dependencies]
+tokio = { version = "1", features = ["macros", "rt-multi-thread"] }
 
 [lints.rust]
 unsafe_code = "forbid"
