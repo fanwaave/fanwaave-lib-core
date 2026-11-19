@@ -36,6 +36,20 @@ pub enum ReadError {
     InvalidData,
 }
 
+// Named SQL projection avoids positional column-order ambiguity and makes
+// missing/renamed fields a type-safe SQLx decode failure.
+#[derive(sqlx::FromRow)]
+struct ContactJobRow {
+    idempotency_key: String,
+    channel: String,
+    provider: String,
+    status: String,
+    attempt_count: i32,
+    max_attempts: i32,
+    provider_message_id: Option<String>,
+    last_error: Option<String>,
+}
+
 /// A service-scoped read credential, NOT a per-tenant authorization system.
 /// A future tenant-specific contract needs separately reviewed authority.
 #[derive(Clone)]
@@ -129,43 +143,32 @@ impl ReadContext {
         authorization: &str,
     ) -> Result<Option<ContactJobView>, ReadError> {
         self.authorize(authorization)?;
-        let row: Option<(
-            String,
-            String,
-            String,
-            String,
-            i32,
-            i32,
-            Option<String>,
-            Option<String>,
-        )> = sqlx::query_as(
+        let row = sqlx::query_as::<_, ContactJobRow>(
             "SELECT idempotency_key, channel, provider, status, attempt_count, \
-                    max_attempts, provider_message_id, last_error \
-                 FROM public.contact_jobs WHERE id = $1",
+                max_attempts, provider_message_id, last_error \
+             FROM public.contact_jobs WHERE id = $1",
         )
         .bind(job_id)
         .fetch_optional(&self.pool)
         .await
         .map_err(|_| ReadError::Database)?;
 
-        row.map(
-            |(key, channel, provider, status, attempts, max_attempts, message_id, last_error)| {
-                if attempts < 0 || max_attempts <= 0 {
-                    return Err(ReadError::InvalidData);
-                }
-                Ok(ContactJobView {
-                    job_id: job_id.to_string(),
-                    idempotency_key: key,
-                    channel: parse_channel(&channel)?,
-                    provider: parse_provider(&provider)?,
-                    status: parse_status(&status)?,
-                    attempt_count: attempts,
-                    max_attempts,
-                    provider_message_id: message_id,
-                    last_error,
-                })
-            },
-        )
+        row.map(|job| {
+            if job.attempt_count < 0 || job.max_attempts <= 0 {
+                return Err(ReadError::InvalidData);
+            }
+            Ok(ContactJobView {
+                job_id: job_id.to_string(),
+                idempotency_key: job.idempotency_key,
+                channel: parse_channel(&job.channel)?,
+                provider: parse_provider(&job.provider)?,
+                status: parse_status(&job.status)?,
+                attempt_count: job.attempt_count,
+                max_attempts: job.max_attempts,
+                provider_message_id: job.provider_message_id,
+                last_error: job.last_error,
+            })
+        })
         .transpose()
     }
 
