@@ -31,7 +31,8 @@ async fn reads_real_contact_job_and_unknown_id_is_none() {
     let reader = ReadContext::connect(&config, TEST_SECRET)
         .await
         .expect("live SELECT-only reader opens");
-    let row = reader.get_contact_job(expected_uuid(), TEST_AUTH)
+    let row = reader
+        .get_contact_job(expected_uuid(), TEST_AUTH)
         .await
         .expect("query succeeds")
         .expect("fixture row exists");
@@ -43,9 +44,14 @@ async fn reads_real_contact_job_and_unknown_id_is_none() {
     assert_eq!(row.attempt_count, 0);
     assert_eq!(row.max_attempts, 8);
     assert!(row.provider_message_id.is_none());
-    assert!(reader.get_contact_job(
-        Uuid::parse_str(MISSING_ID).expect("well-formed UUID"), TEST_AUTH
-    ).await.expect("unknown ID is a legitimate read").is_none());
+    assert!(reader
+        .get_contact_job(
+            Uuid::parse_str(MISSING_ID).expect("well-formed UUID"),
+            TEST_AUTH
+        )
+        .await
+        .expect("unknown ID is a legitimate read")
+        .is_none());
 
     let debug = format!("{reader:?}");
     assert!(!debug.contains(TEST_SECRET));
@@ -81,12 +87,10 @@ async fn database_role_cannot_mutate_even_using_separate_connection() {
 
     // Exercise the real database grants independently of the read-context's
     // session read-only setting; these SQL writes must fail at the DB layer.
-    let update = sqlx::query(
-        "UPDATE public.contact_jobs SET status = 'sent' WHERE id = $1",
-    )
-    .bind(expected_uuid())
-    .execute(&pool)
-    .await;
+    let update = sqlx::query("UPDATE public.contact_jobs SET status = 'sent' WHERE id = $1")
+        .bind(expected_uuid())
+        .execute(&pool)
+        .await;
     assert!(update.is_err(), "SELECT-only role must not UPDATE");
 
     let insert = sqlx::query(
@@ -121,8 +125,7 @@ async fn refuses_writable_role_and_invalid_reader_configuration() {
 
     let admin_dsn = std::env::var("FANWAAVE_READ_ADMIN_TEST_DSN")
         .expect("CI must supply test administrator DSN");
-    let admin_config = CoreConfig::from_values(admin_dsn, None)
-        .expect("admin DSN parses");
+    let admin_config = CoreConfig::from_values(admin_dsn, None).expect("admin DSN parses");
     assert!(matches!(
         ReadContext::connect(&admin_config, TEST_SECRET).await,
         Err(ReadError::ExcessivePrivileges)
